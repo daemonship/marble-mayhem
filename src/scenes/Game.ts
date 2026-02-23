@@ -133,14 +133,21 @@ export class Game extends Phaser.Scene {
       lineSpacing: 8,
     }).setOrigin(0.5).setDepth(100).setAlpha(0.95);
 
-    // Fade out after 3.5 seconds
-    this.time.delayedCall(3000, () => {
+    // Fade out after 3 seconds
+    const timer = this.time.delayedCall(3000, () => {
+      if (!text.active) return; // scene may have been torn down before this fires
       this.tweens.add({
         targets: text,
         alpha: 0,
         duration: 800,
         onComplete: () => { if (text.active) text.destroy(); },
       });
+    });
+
+    // Cancel timer and clean up text if the scene shuts down before the fade completes
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      timer.remove();
+      if (text.active) text.destroy();
     });
   }
 
