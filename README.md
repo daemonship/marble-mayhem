@@ -1,5 +1,7 @@
 # Spud Storm
 
+**[Play it live → spudstorm.pages.dev](https://spudstorm.pages.dev)**
+
 > An instantly playable browser bullet-heaven where you guide a heroic spud through waves of relentless enemies, collecting XP and choosing upgrades to survive as long as possible.
 
 ## Feedback & Ideas
@@ -20,7 +22,8 @@
 | HUD, screens & polish | 📋 Planned | DOM overlay UI, hit flash, SFX, particles |
 | Code review | 📋 Planned | |
 | Pre-launch verification | 📋 Planned | |
-| Deploy to Fly.io | 📋 Planned | |
+| Deploy to Cloudflare Pages | ✅ Complete | https://spudstorm.pages.dev |
+| Difficulty system | 📋 Planned | |
 
 ## What It Solves
 
@@ -58,7 +61,7 @@ All tests are Playwright browser tests against a running instance of the game. T
 npm run build && npm test
 
 # Test against a deployed URL
-APP_URL=https://spudstorm.fly.dev npm test
+APP_URL=https://spudstorm.pages.dev npm test
 ```
 
 Tests are currently **red** — implementations for Tasks 2–4 will make them green.
