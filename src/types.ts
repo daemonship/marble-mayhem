@@ -9,12 +9,25 @@ export interface PlayerStats {
   projectileCount: number;
   magnetRange: number;
   xpGain: number;
+  healthRegen: number;
 }
 
 export interface UpgradeOption {
   name: string;
   description: string;
   apply(stats: PlayerStats): PlayerStats;
+}
+
+export interface EnemyState {
+  x: number;
+  y: number;
+  health: number;
+  maxHealth: number;
+}
+
+export interface ProjectileState {
+  x: number;
+  y: number;
 }
 
 export interface GameState {
@@ -25,6 +38,12 @@ export interface GameState {
   kills: number;
   elapsedSeconds: number;
   playerStats: PlayerStats;
+  playerPos: { x: number; y: number };
+  enemies: EnemyState[];
+  projectiles: ProjectileState[];
+  lastFireTime?: number;
+  projectileFireInterval?: number;
+  particlesEnabled?: boolean;
 }
 
 export interface EnemyData {
@@ -61,4 +80,5 @@ export const INITIAL_PLAYER_STATS: PlayerStats = {
   projectileCount: 1,
   magnetRange: 80,
   xpGain: 1.0,
+  healthRegen: 0,
 };

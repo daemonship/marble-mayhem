@@ -1,14 +1,18 @@
 import Phaser from 'phaser';
 
 // Preload scene — load all assets before game starts
-// TODO (Task 2): Load sprites, audio, tilemaps
 export class Preload extends Phaser.Scene {
   constructor() {
     super({ key: 'Preload' });
   }
 
   preload(): void {
-    // TODO: load game assets
+    // Generate a 1x1 white pixel texture for placeholder sprites
+    const graphics = this.add.graphics();
+    graphics.fillStyle(0xffffff);
+    graphics.fillRect(0, 0, 1, 1);
+    graphics.generateTexture('pixel', 1, 1);
+    graphics.destroy();
   }
 
   create(): void {
