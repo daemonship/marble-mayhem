@@ -111,6 +111,37 @@ export class Game extends Phaser.Scene {
 
     // Enable particles flag
     this.gameState.particlesEnabled = true;
+
+    // Show brief tutorial overlay unless this is attract mode
+    if (!(window as any).attractModeActive) {
+      this.showTutorialOverlay();
+    }
+  }
+
+  private showTutorialOverlay(): void {
+    const lines = [
+      'MOVE YOUR MOUSE to guide your potato',
+      'Auto-fires at nearby enemies',
+      'Collect green gems for XP • Level up to upgrade',
+    ];
+    const text = this.add.text(400, 200, lines, {
+      fontSize: '18px',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 4,
+      align: 'center',
+      lineSpacing: 8,
+    }).setOrigin(0.5).setDepth(100).setAlpha(0.95);
+
+    // Fade out after 3.5 seconds
+    this.time.delayedCall(3000, () => {
+      this.tweens.add({
+        targets: text,
+        alpha: 0,
+        duration: 800,
+        onComplete: () => { if (text.active) text.destroy(); },
+      });
+    });
   }
 
   private createParticleTexture(): void {
@@ -189,7 +220,7 @@ export class Game extends Phaser.Scene {
 
     if (this.attractMode.isActive()) {
       // Use attract mode bot control
-      const botTarget = this.attractMode.update(delta, this.player.x, this.player.y);
+      const botTarget = this.attractMode.update(deltaSeconds * 1000, this.player.x, this.player.y);
       targetX = botTarget.x;
       targetY = botTarget.y;
     } else {

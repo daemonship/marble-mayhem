@@ -193,10 +193,24 @@ function createDOMOverlay(): void {
   startScreen.style.fontFamily = 'sans-serif';
   startScreen.style.zIndex = '100';
   startScreen.innerHTML = `
-    <div style="text-align: center;">
-      <h1>Spud Storm</h1>
-      <p>Survive as long as you can!</p>
-      <button id="start-run-btn" style="font-size: 1.5rem; padding: 0.5em 1em; cursor: pointer;">Start Run</button>
+    <div style="max-width: 520px; width: 90%; text-align: center;">
+      <h1 style="font-size: 3.2rem; color: #fbbf24; text-shadow: 0 0 30px #f59e0b, 0 0 60px rgba(245,158,11,0.4); margin: 0 0 0.15em; letter-spacing: 0.06em; font-family: sans-serif;">🥔 SPUD STORM</h1>
+      <p style="font-size: 1rem; color: #9ca3af; margin-bottom: 1.8em; font-style: italic; font-family: sans-serif;">A never-ending wave survival game</p>
+
+      <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 1.4em 1.8em; margin-bottom: 1.8em; text-align: left;">
+        <h3 style="color: #a78bfa; margin: 0 0 0.9em; text-align: center; font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; font-family: sans-serif;">How to Play</h3>
+        <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.65em; color: #d1d5db; font-family: sans-serif; font-size: 0.95rem;">
+          <li>🖱️ <strong>Move your mouse</strong> — your potato follows the cursor</li>
+          <li>💥 <strong>Auto-attack</strong> — fires automatically at the nearest enemy</li>
+          <li>💚 <strong>Collect green gems</strong> dropped by defeated enemies to gain XP</li>
+          <li>⬆️ <strong>Level up</strong> — choose a powerful upgrade each level</li>
+          <li>❤️ <strong>Don't let enemies touch you</strong> — each hit drains health</li>
+        </ul>
+      </div>
+
+      <button id="start-run-btn" style="font-size: 1.3rem; padding: 0.65em 2.5em; cursor: pointer; background: #7c3aed; color: white; border: 2px solid #a78bfa; border-radius: 8px; font-family: sans-serif; letter-spacing: 0.05em;">▶ START GAME</button>
+
+      <p style="color: #6b7280; font-size: 0.8rem; margin-top: 1.2em; font-family: sans-serif;">Tip: Keep moving — standing still is fatal!</p>
     </div>
   `;
   document.body.appendChild(startScreen);
@@ -294,6 +308,8 @@ function createDOMOverlay(): void {
 
       // Reset game state for fresh run (this sets phase to 'start')
       resetGameState();
+      (window as any).attractModeActive = false;
+      (window as any).attractModeEnded = false;
 
       // Start the game scene
       const gameScene = window.game.scene.getScene('Game');
