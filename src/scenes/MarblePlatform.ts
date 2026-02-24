@@ -360,10 +360,12 @@ export class MarblePlatform extends Phaser.Scene {
     const justLeft  = goLeft  && !this.prevLeft;
     const justRight = goRight && !this.prevRight;
 
-    // Kick impulse on first press so short taps give noticeable push (ground only)
+    // Kick impulse on first press — ground only, same direction only.
+    // Don't kick when reversing; let acceleration handle deceleration naturally
+    // so momentum carries through direction changes.
     const KICK = 120;
-    if (grounded && justLeft  && body.velocity.x > -KICK) body.setVelocityX(-KICK);
-    if (grounded && justRight && body.velocity.x <  KICK) body.setVelocityX( KICK);
+    if (grounded && justLeft  && body.velocity.x >= 0) body.setVelocityX(-KICK);
+    if (grounded && justRight && body.velocity.x <= 0) body.setVelocityX( KICK);
 
     // Air control is heavily reduced — player is mostly committed to launch trajectory.
     // Tiny influence allows panic micro-corrections without undermining momentum strategy.
