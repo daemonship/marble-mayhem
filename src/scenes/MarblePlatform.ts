@@ -27,7 +27,7 @@ const SURFACE_PROPS: Record<SurfaceType, SurfaceProps> = {
   [SurfaceType.ICE]:        { drag: 0.998, accelMultiplier: 0.20, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 0.90 },
   [SurfaceType.SNOW]:       { drag: 0.972, accelMultiplier: 0.75, maxVxMultiplier: 1.00, bounceY: 0.10, jumpMultiplier: 0.82 },
   [SurfaceType.WET_METAL]:  { drag: 0.958, accelMultiplier: 0.35, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 0.95 },
-  [SurfaceType.BOUNCE_PAD]: { drag: 0.930, accelMultiplier: 1.00, maxVxMultiplier: 1.00, bounceY: 0.82, jumpMultiplier: 1.00 },
+  [SurfaceType.BOUNCE_PAD]: { drag: 0.930, accelMultiplier: 1.00, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 1.00 },
   [SurfaceType.CONVEYOR]:   { drag: 0.930, accelMultiplier: 1.00, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 1.00 },
 };
 
@@ -745,6 +745,12 @@ export class MarblePlatform extends Phaser.Scene {
     // Set vertical bounce for next physics step
     body.setBounce(0.12, props.bounceY);
 
+    // BOUNCE_PAD: Arcade Physics bounce has a 1-frame lag, so apply a direct impulse.
+    // Fires once per landing: vy > -50 means "not already bouncing hard upward".
+    if (surface === SurfaceType.BOUNCE_PAD && grounded && body.velocity.y > -50) {
+      body.setVelocityY(-720);
+    }
+
     // Conveyor: push marble horizontally
     if (grounded && surface === SurfaceType.CONVEYOR) {
       const plat = this.getPlatformAtFeet();
@@ -779,7 +785,7 @@ export class MarblePlatform extends Phaser.Scene {
     if (grounded && goRight && Math.abs(body.velocity.x) < 30) body.setVelocityX( KICK);
 
     const props = SURFACE_PROPS[surface];
-    const accel = this.ACCEL_X * (grounded ? 1.0 : 0.15) * props.accelMultiplier;
+    const accel = this.ACCEL_X * (grounded ? 1.0 : 0.22) * props.accelMultiplier;
 
     if (goLeft) {
       body.setAccelerationX(-accel);
@@ -1066,8 +1072,9 @@ export class MarblePlatform extends Phaser.Scene {
         sg.vx *= 0.75;
       }
       sg.img.setPosition(sg.x, sg.y).setAlpha(Math.min(1, (5000 - age) / 800));
-      // Collect scattered gem (after physics so distance uses updated position)
-      if (Phaser.Math.Distance.Between(mx, my, sg.x, sg.y) < this.R + 14) {
+      // age > 250ms: gems spawn at marble pos (dist=0); without this guard
+      // updateCollectibles re-collects them instantly in the same frame they scatter.
+      if (age > 250 && Phaser.Math.Distance.Between(mx, my, sg.x, sg.y) < this.R + 14) {
         if (this.gemCount < this.gems.length) this.gemCount++;
         sg.img.destroy();
         this.scatteredGems.splice(i, 1);
@@ -1246,8 +1253,17 @@ export class MarblePlatform extends Phaser.Scene {
       const dx = Math.abs(mx - sp.def.x);
       const dy = Math.abs((my + this.R) - sp.def.y);
       if (dx < this.SPEED_PAD_RADIUS && dy < 20) {
-        if (sp.def.vx !== 0) body.setVelocityX(sp.def.vx);
-        if (sp.def.vy !== 0) body.setVelocityY(sp.def.vy);
+        // Boost to at least this speed in the pad's direction — never reduce existing speed
+        if (sp.def.vx !== 0) {
+          body.setVelocityX(sp.def.vx > 0
+            ? Math.max(body.velocity.x, sp.def.vx)
+            : Math.min(body.velocity.x, sp.def.vx));
+        }
+        if (sp.def.vy !== 0) {
+          body.setVelocityY(sp.def.vy < 0
+            ? Math.min(body.velocity.y, sp.def.vy)  // upward: ensure at least this fast upward
+            : Math.max(body.velocity.y, sp.def.vy)); // downward: ensure at least this fast down
+        }
         sp.exitPos = { x: mx, y: my };
         // Brief yellow flash
         const flash = this.add.graphics().setDepth(20);
