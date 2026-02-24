@@ -251,8 +251,8 @@ export class Game extends Phaser.Scene {
       targetY = botTarget.y;
     } else {
       if (!this.mouseActive) return;
-      targetX = this.pointer.x;
-      targetY = this.pointer.y;
+      targetX = this.mouseX;
+      targetY = this.mouseY;
     }
 
     // Clamp to world bounds (viewport)
