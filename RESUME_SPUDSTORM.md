@@ -1,59 +1,67 @@
-# RESUME: Spudstorm (Marble Mayhem)
+# RESUME — SPUDSTORM
+**Date:** 2026-02-23
+**Status:** IN PROGRESS — mouse fix deployed (0d8cf2e), awaiting user confirmation
 
-**Date:** 2026-02-24 10:45 UTC
-**Status:** In Progress — Seesaw mechanic implementation started
-**Branch:** marble-mayhem
-**Project:** Browser physics platformer game
+---
 
-## Current Work
+## What Was Being Worked On
 
-**Implementing Seesaw Platform Mechanic** — Dynamic rotating platforms with counterweight physics. Session was interrupted mid-implementation while extending `LevelDef.ts` with seesaw platform type.
+Fixing mouse input so the player character follows the mouse in the browser game at https://spudstorm.pages.dev (Cloudflare Pages).
 
-## What's Been Done (Recent Sessions)
+The game is Phaser 3 / TypeScript. Canvas is 800x600. Player is controlled by mouse movement.
 
-### Physics Engine Fixes (All deployed)
-1. **Startup kick** — Fixed "can't move when stopped" (KICK fires when grounded + direction held + speed < 30px/s)
-2. **Surface drag** — Replaced multiplier system with absolute values (ICE: 0.998, CONCRETE: 0.930, SAND/MUD slower)
-3. **Jump height by terrain** — Added `jumpMultiplier` per surface (MUD 65%, SAND 80%, SNOW 82%, GRASS 92%, ICE/CONCRETE 100%)
-4. **Manual jump release** — Removed auto-release at max charge
-5. **Charge lock mechanic** — Hold SPACE to charge, release within 250ms to lock charge, press again to fire
+---
 
-### Venture Pipeline Documentation
-- Created VENTURE-815 in Plane (Marble Mayhem project)
-- Wrote `scope_review.md` and `cto_plan.md`
-- Documented "discovered project" intake process in `/home/shazbot/venture/DISCOVERED_PROJECT_INTAKE.md`
+## Current State (commit 0d8cf2e)
 
-## Blocking Issue (Still Unfixed)
+### Root Cause Identified & Fixed
+- **Problem**: `canvas.addEventListener('mousemove', ...)` only fires when mouse is over the canvas element. Phaser forces `position: absolute` on the canvas which pins it to `(0,0)` of the container. On large screens, the canvas occupies the upper-left 800×600 area while the user's mouse is in the center — missing the canvas entirely → zero events → player stays put.
+- **Fix**: Switched to `window.addEventListener('mousemove', ...)` so events fire regardless of mouse position anywhere on screen. Coordinates converted via `getBoundingClientRect()` to game space.
 
-**Marble freezes when not holding direction key** — Root cause: `body.blocked.down` unreliable for circular physics bodies. Requires position-based grounded check instead of velocity/collision-based detection.
+### Also Fixed
+- Canvas centering: CSS `top/left/right/bottom: 0; margin: auto` on `#game-container canvas` — works with Phaser's `position: absolute` without breaking `getBoundingClientRect()`
+- Removed `scale.autoCenter: CENTER_BOTH` from Phaser config (was fighting with CSS centering)
+- Added debug overlay: `canvas@X,Y ptr:X,Y player:X,Y` at bottom of canvas
 
-## Files Modified (Uncommitted)
+### Files Changed (commit 0d8cf2e)
+- `src/scenes/Game.ts` — `window.addEventListener` instead of `canvas.addEventListener`, debug overlay
+- `src/main.ts` — removed autoCenter
+- `index.html` — CSS canvas centering rule
 
-- `src/types/LevelDef.ts` — Partial extension of PlatformDef for seesaw type
-- `src/scenes/MarblePlatform.ts` — All physics fixes implemented
-- `playwright.config.ts` — Modified (reason unclear)
+### Debug Overlay
+Yellow text at bottom of canvas during gameplay:
+```
+canvas@X,Y  ptr:X,Y  player:X,Y
+```
+- `canvas@X,Y` = canvas top-left in viewport (should be ~560,240 on 1920×1080; 0,0 means centering broke)
+- `ptr:X,Y` = computed game-space mouse coords (should follow mouse, 0–800 / 0–600 range)
+- `player:X,Y` = player position (should follow ptr with slight lag)
 
-## IMMEDIATE NEXT TASK
+---
 
-1. Complete `LevelDef.ts` PlatformDef seesaw extension with `pivotX`, `pivotY`, `mass` properties
-2. Implement `SeesawSystem.ts` — manages tilting platforms with dynamic physics bodies
-3. Fix grounded check in `MarblePlatform.ts` — replace `body.blocked.down` with position-based detection
-4. Add one seesaw prototype to sandbox Zone 0
-5. Test in browser, commit, and deploy
+## Diagnosis Guide (if still broken)
 
-## Seesaw Mechanic Design
+| Debug output | Meaning | Fix |
+|---|---|---|
+| `canvas@0,0` | Canvas not centered — CSS not applied | Check browser DevTools for canvas element style |
+| `ptr: 0,0` regardless of mouse | window.mousemove handler not firing | Check for JS errors in console |
+| `ptr: X,Y` correct, player doesn't move | Logic bug in `updatePlayerMovement` | Check `mouseActive` guard (~line 270) |
+| `ptr:` wildly out of range | Canvas coords wrong — `getBoundingClientRect` off | Check for CSS transforms on canvas |
 
-- Platform tilts based on marble position relative to pivot point
-- Gems/counterweights placed on platform balance the tilt
-- Player becomes counterweight when holding a gem
-- As player moves, balance shifts and platform tilts dramatically
-- Extends naturally to pressure plate system (gate mechanics)
+---
 
-## Reference
+## Deployment Command
 
-Full conversation and context: `CONTEXT_SPUDSTORM.md`
+```bash
+cd /home/shazbot/Projects/products/games/spudstorm
+npm run build && CLOUDFLARE_API_TOKEN=$(cat /home/shazbot/credentials/cloudflare-token.txt) npx wrangler pages deploy dist --project-name spudstorm
+```
 
-Recent commits:
-- `9b33653` feat: sandbox test level with full mechanic suite
-- `9937375` feat: level data format infrastructure
-- `634c449` fix: preserve momentum through direction changes
+---
+
+## Key Files
+
+- `src/scenes/Game.ts` — `mouseMoveHandler` ~line 65, `debugText` ~line 79, `updatePlayerMovement()` ~line 260
+- `src/main.ts` — Phaser config
+- `index.html` — canvas CSS centering
+- `memory/MEMORY.md` — project memory

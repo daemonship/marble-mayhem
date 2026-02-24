@@ -721,7 +721,7 @@ export class MarblePlatform extends Phaser.Scene {
     } else {
       body.setAccelerationX(0);
       if (grounded && Math.abs(body.velocity.x) > 1) {
-        const drag = Math.pow(props.drag, delta / 16.67);
+        const drag = Math.pow(props.drag, dt / 0.01667);
         body.setVelocityX(body.velocity.x * drag);
       } else if (grounded) {
         body.setVelocityX(0);
