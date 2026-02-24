@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { LevelDef, SurfaceType, PlatformDef } from '../types/LevelDef';
 import { sandbox } from '../levels/sandbox';
+import { SeesawSystem, SeesawContact } from '../systems/SeesawSystem';
 
 // ── Surface physics table ─────────────────────────────────────────────────────
 // drag            — absolute per-frame drag coefficient (NOT a multiplier on base drag)
@@ -157,6 +158,9 @@ export class MarblePlatform extends Phaser.Scene {
   // ── Parallax layers ────────────────────────────────────────────────────────
   private pxLayers: Array<{ ts: Phaser.GameObjects.TileSprite; factor: number }> = [];
 
+  // ── Seesaw system ──────────────────────────────────────────────────────────
+  private seesawSystem!: SeesawSystem;
+
   // True whenever any part of the charge state is active (blocks springs, rotation, etc.)
   private get isChargeActive(): boolean {
     return this.charging || this.chargeLocked || this.chargeArmedUntil > 0;
@@ -174,6 +178,8 @@ export class MarblePlatform extends Phaser.Scene {
 
     this.physics.world.setBounds(0, -400, this.levelDef.worldW, 1100);
     this.cameras.main.setBounds(0, -400, this.levelDef.worldW, 1100);
+
+    this.seesawSystem = new SeesawSystem(this);
 
     this.buildParallax();
     this.buildTextures();
@@ -514,8 +520,8 @@ export class MarblePlatform extends Phaser.Scene {
       this.add.text(s.x, s.y, s.text, signStyle).setOrigin(0.5, 1).setDepth(6);
     }
 
-    // Zone-divider banners (taller, brighter)
-    // (Signs already contain these — see sandbox.ts ▌ prefix entries)
+    // Seesaws
+    this.seesawSystem.build(def.seesaws ?? []);
 
     // Decorative floor
     const G = def.groundY;
@@ -570,23 +576,63 @@ export class MarblePlatform extends Phaser.Scene {
   // UPDATE — main loop
   // ═══════════════════════════════════════════════════════════════════════════
   update(time: number, delta: number): void {
-    const body      = this.marble.body as Phaser.Physics.Arcade.Body;
-    const dt        = delta / 1000;
-    if (body.blocked.down) this.lastGroundedAt = time;
-    const grounded  = body.blocked.down || (time - this.lastGroundedAt < this.COYOTE_MS);
+    const body = this.marble.body as Phaser.Physics.Arcade.Body;
+    const dt   = delta / 1000;
+
+    // ── Grounded detection ─────────────────────────────────────────────────
+    // body.blocked.down is unreliable for circular bodies — supplement with
+    // a position-based check: marble bottom within a few pixels of any platform top.
+    const mBottom    = this.marble.y + this.R;
+    const posGrounded = this.levelDef.platforms.some(p =>
+      this.marble.x >= p.x       &&
+      this.marble.x <= p.x + p.w &&
+      mBottom >= p.y - 2          &&
+      mBottom <= p.y + 8          &&
+      body.velocity.y >= -80,
+    );
+    if (body.blocked.down || posGrounded) this.lastGroundedAt = time;
+
+    // ── Seesaw physics update (uses this frame's marble position) ──────────
+    const contact = this.seesawSystem.update(dt, this.marble.x, this.marble.y, this.R);
+
+    const grounded = body.blocked.down || posGrounded || contact.onSeesaw ||
+                     (time - this.lastGroundedAt < this.COYOTE_MS);
 
     this.updateParallax();
-    const surface = this.getSurface(grounded);
+    const surface = contact.onSeesaw ? SurfaceType.CONCRETE : this.getSurface(grounded);
     this.updateSurface(body, grounded, surface, dt);
     this.updateMovement(body, grounded, surface, dt);
+
+    // Apply gravity component along seesaw slope (marble slides toward lower arm)
+    if (contact.onSeesaw) {
+      body.setVelocityX(body.velocity.x + contact.slideAccelX * dt);
+    }
+
     this.updateJump(time, body, grounded, surface);
     this.updateSprings(body, grounded);
     this.updatePortals(time);
     this.updateEnemies(time, dt);
     this.updateCollectibles();
+
+    // ── Seesaw position correction ─────────────────────────────────────────
+    // Push marble up to plank surface if it has sunk into it this frame.
+    if (contact.onSeesaw) {
+      const targetCenterY = contact.plankTopY - this.R;
+      if (this.marble.y > targetCenterY + 1) {
+        this.marble.y  = targetCenterY;
+        body.y         = targetCenterY - this.R;
+        if (body.velocity.y > contact.surfaceVy) {
+          body.setVelocityY(contact.surfaceVy);
+        }
+      }
+    }
+
     this.updateVisuals(time, body, dt, grounded);
     this.updateHUD(time, body, grounded, surface);
     this.checkGoalAndDeath();
+
+    // ── Seesaw draw (after all position updates) ───────────────────────────
+    this.seesawSystem.draw();
 
     this.prevSpace = this.cursors.space.isDown;
   }

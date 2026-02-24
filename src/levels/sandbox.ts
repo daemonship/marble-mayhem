@@ -13,7 +13,7 @@
 //   Zone 5 (x 7900–9350)  : Enemies — Roller patrol + Chaser
 //   Zone 6 (x 9500–10600) : Gems + Checkpoints + Goal
 
-import { LevelDef, SurfaceType } from '../types/LevelDef';
+import { LevelDef, SurfaceType, SeesawDef } from '../types/LevelDef';
 
 const G  = 528;   // GROUND_Y — top surface of main ground
 
@@ -31,8 +31,10 @@ export const sandbox: LevelDef = {
   platforms: [
 
     // ── Zone 0: Warmup ──────────────────────────────────────────────────────
-    // Wide spawn area → two small gaps to warm up jump timing
-    { x: 0,    y: G,       w: 680, h: 32, surface: SurfaceType.CONCRETE },
+    // Spawn area → seesaw → gaps to warm up jump timing
+    // Ground is split around the seesaw (pivot 310, arm span 180–440)
+    { x: 0,    y: G,       w: 180, h: 32, surface: SurfaceType.CONCRETE }, // pre-seesaw
+    { x: 440,  y: G,       w: 240, h: 32, surface: SurfaceType.CONCRETE }, // post-seesaw
     { x: 740,  y: G,       w: 240, h: 32, surface: SurfaceType.CONCRETE }, // gap: 60px
     { x: 1040, y: G,       w: 220, h: 32, surface: SurfaceType.CONCRETE }, // gap: 60px
     // Floating shelf above gap — reachable via spring
@@ -153,7 +155,8 @@ export const sandbox: LevelDef = {
   // ── Zone signs ───────────────────────────────────────────────────────────────
   signs: [
     // Zone 0
-    { x: 180,  y: 488, text: 'A/D  ROLL    SPACE  charge jump' },
+    { x: 100,  y: 488, text: 'A/D  ROLL    SPACE  charge jump' },
+    { x: 310,  y: G - 46, text: '← SEESAW →' },
     { x: 830,  y: 393, text: 'spring here →' },
 
     // Zone transition banners
@@ -196,5 +199,22 @@ export const sandbox: LevelDef = {
     { x: 9440, y: 500, text: '1' },
     { x: 9715, y: 372, text: '2' },
     { x: 10155, y: 252, text: '3' },
+  ],
+
+  // ── Seesaws ───────────────────────────────────────────────────────────────
+  seesaws: [
+    {
+      // Zone 0: introductory seesaw — pre-balanced right-heavy by counterweight gem.
+      // Marble rolling on from the left outweighs the gem and tilts the plank.
+      pivotX:   310,
+      pivotY:   G,            // plank top surface at rest = ground level
+      length:   260,          // arm span: x 180–440
+      maxAngle: Math.PI / 8,  // ≈22.5° max tilt
+      rotMass:  8000,         // rotational inertia (higher = slower response)
+      damping:  0.94,         // angular velocity decay per 60fps frame
+      gems: [
+        { xOffset: 80, mass: 0.5 },   // counterweight on right arm
+      ],
+    } as SeesawDef,
   ],
 };

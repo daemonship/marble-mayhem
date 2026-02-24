@@ -72,6 +72,32 @@ export interface SignDef {
   text: string;
 }
 
+// ── Seesaw ────────────────────────────────────────────────────────────────────
+// A plank that pivots at its center. Weights on each arm create torque.
+// The marble's mass and any gems on the arms all contribute to tilting.
+export interface SeesawGemDef {
+  /** Horizontal distance from pivot. Negative = left arm, positive = right arm. */
+  xOffset: number;
+  /** Mass of this gem (contributes to torque). */
+  mass:    number;
+}
+
+export interface SeesawDef {
+  pivotX:   number;
+  /** Y of the plank center point. Set to groundY+8 to align plank top with ground. */
+  pivotY:   number;
+  /** Total plank length in pixels. */
+  length:   number;
+  /** Maximum tilt angle in radians (e.g. Math.PI/6 ≈ 30°). */
+  maxAngle: number;
+  /** Rotational inertia — higher = slower tilt. Tune between 6000–15000. */
+  rotMass:  number;
+  /** Angular velocity damping per 16ms frame (0.90–0.98). */
+  damping:  number;
+  /** Gems pre-placed on the plank arms. */
+  gems?:    SeesawGemDef[];
+}
+
 export interface LevelDef {
   id: string;
   /** World number (1-indexed). */
@@ -94,5 +120,7 @@ export interface LevelDef {
   goal: GoalDef;
   secretExit?: SecretExitDef;
   /** In-world text labels — zone names, hints, mechanic callouts. */
-  signs?: SignDef[];
+  signs?:    SignDef[];
+  /** Tilting pivot platforms. */
+  seesaws?:  SeesawDef[];
 }
