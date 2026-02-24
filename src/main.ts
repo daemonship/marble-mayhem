@@ -292,7 +292,10 @@ function createDOMOverlay(): void {
       <p>Time: <span id="game-over-time">0</span>s</p>
       <p>Level: <span id="game-over-level">1</span></p>
       <p>Kills: <span id="game-over-kills">0</span></p>
-      <button id="play-again-btn" style="font-size: 1.5rem; padding: 0.5em 1em; cursor: pointer;">Play Again</button>
+      <div style="display:flex;gap:12px;justify-content:center;margin-top:8px;">
+        <button id="play-again-btn" style="font-size: 1.3rem; padding: 0.5em 1.2em; cursor: pointer; background:#7c3aed; color:white; border:2px solid #a78bfa; border-radius:8px;">▶ Play Again</button>
+        <button id="main-menu-btn" style="font-size: 1.3rem; padding: 0.5em 1.2em; cursor: pointer; background:#374151; color:white; border:2px solid #6b7280; border-radius:8px;">⬅ Main Menu</button>
+      </div>
     </div>
   `;
   container.appendChild(gameOverScreen);
@@ -331,20 +334,34 @@ function createDOMOverlay(): void {
   if (playAgainBtn) {
     playAgainBtn.addEventListener('click', () => {
       gameOverScreen.style.display = 'none';
-      startScreen.style.display = 'flex';
-      muteButton.style.display = 'none'; // Hide mute button on start screen
 
-      // Reset game state and clear attract mode flags
+      // Reset game state and clear attract mode flags before starting scene
       resetGameState();
       window.attractModeActive = false;
       window.attractModeEnded = false;
 
-      // Stop game scene
-      if (window.game.scene.getScene('Game')) {
-        window.game.scene.stop('Game');
-      }
+      // Stop GameOver (and Game in case it's somehow still active), then
+      // start a fresh game directly — no title screen detour needed for Play Again
+      window.game.scene.stop('GameOver');
+      window.game.scene.stop('Game');
+      window.game.scene.start('Game');
+    });
+  }
 
-      // Return to main menu
+  const mainMenuBtn = document.getElementById('main-menu-btn');
+  if (mainMenuBtn) {
+    mainMenuBtn.addEventListener('click', () => {
+      gameOverScreen.style.display = 'none';
+      hud.style.display = 'none';
+      muteButton.style.display = 'none';
+      startScreen.style.display = 'flex';
+
+      resetGameState();
+      window.attractModeActive = false;
+      window.attractModeEnded = false;
+
+      window.game.scene.stop('GameOver');
+      window.game.scene.stop('Game');
       window.game.scene.start('MainMenu');
     });
   }
