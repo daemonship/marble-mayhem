@@ -55,20 +55,39 @@ export class Game extends Phaser.Scene {
     // Input
     this.cursors = this.input.keyboard!.createCursorKeys();
 
-    // Track mouse on window (not just canvas) so events fire in the black margins.
-    // Use Phaser's displayScale to convert screen coords → game coords.
+    // Mouse tracking: use Pointer Lock when available so the cursor is confined
+    // to the canvas and can't escape to the OS desktop mid-game.
+    // When locked, movementX/Y give raw deltas; accumulate them into game coords.
+    // When not locked (upgrade modal, lock not yet acquired), fall back to
+    // absolute position so the upgrade buttons still work correctly.
     this.mouseMoveHandler = (e: MouseEvent) => {
       const rect = this.game.canvas.getBoundingClientRect();
-      // Convert CSS pixel offset to game coordinates using canvas rect dimensions.
-      // Avoids DPR issues with this.scale.displayScale which includes physical pixels.
       const scaleX = rect.width > 0 ? this.scale.width / rect.width : 1;
       const scaleY = rect.height > 0 ? this.scale.height / rect.height : 1;
-      this.mouseX = (e.clientX - rect.left) * scaleX;
-      this.mouseY = (e.clientY - rect.top) * scaleY;
+      if (document.pointerLockElement === this.game.canvas) {
+        this.mouseX = Phaser.Math.Clamp(this.mouseX + e.movementX * scaleX, 0, this.scale.width);
+        this.mouseY = Phaser.Math.Clamp(this.mouseY + e.movementY * scaleY, 0, this.scale.height);
+      } else {
+        this.mouseX = (e.clientX - rect.left) * scaleX;
+        this.mouseY = (e.clientY - rect.top) * scaleY;
+      }
     };
     window.addEventListener('mousemove', this.mouseMoveHandler);
+
+    // Request pointer lock on canvas click (must be user gesture).
+    // Also try immediately — succeeds when create() is within a gesture chain.
+    const requestLock = () => {
+      if (!this.isPaused && document.pointerLockElement !== this.game.canvas) {
+        try { this.game.canvas.requestPointerLock(); } catch (_) {}
+      }
+    };
+    this.game.canvas.addEventListener('pointerdown', requestLock);
+    try { this.game.canvas.requestPointerLock(); } catch (_) {}
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this.mouseMoveHandler) window.removeEventListener('mousemove', this.mouseMoveHandler);
+      this.game.canvas.removeEventListener('pointerdown', requestLock);
+      if (document.pointerLockElement === this.game.canvas) document.exitPointerLock();
     });
 
     // Create groups
@@ -529,6 +548,9 @@ export class Game extends Phaser.Scene {
     this.physics.world.pause();
     this.time.paused = true;
 
+    // Release pointer lock so the cursor is visible for clicking upgrade buttons
+    if (document.pointerLockElement === this.game.canvas) document.exitPointerLock();
+
     // Pick 3 random upgrades
     this.pendingUpgrades = pickUpgrades(3);
 
@@ -649,6 +671,9 @@ export class Game extends Phaser.Scene {
       this.lastHitTime = this.time.now; // 1-second invincibility window on resume
       this.isPaused = false;
       this.gameState.phase = 'playing';
+
+      // Re-acquire pointer lock (upgrade button click is a valid user gesture)
+      try { this.game.canvas.requestPointerLock(); } catch (_) {}
     }
   }
 
