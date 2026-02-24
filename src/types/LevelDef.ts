@@ -66,6 +66,12 @@ export interface SecretExitDef {
   dest: string;
 }
 
+export interface SignDef {
+  x: number;
+  y: number;
+  text: string;
+}
+
 export interface LevelDef {
   id: string;
   /** World number (1-indexed). */
@@ -87,4 +93,6 @@ export interface LevelDef {
   checkpoints: CheckpointDef[];
   goal: GoalDef;
   secretExit?: SecretExitDef;
+  /** In-world text labels — zone names, hints, mechanic callouts. */
+  signs?: SignDef[];
 }
