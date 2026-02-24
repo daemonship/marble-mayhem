@@ -27,6 +27,12 @@ export class Game extends Phaser.Scene {
   private hudHpText!: Phaser.GameObjects.Text;
   private hudXpText!: Phaser.GameObjects.Text;
   private hudStatsText!: Phaser.GameObjects.Text;
+  // Pickups
+  private pickups!: Phaser.Physics.Arcade.Group;
+  private pickupSpawnTimer: number = 0;
+  // Temporary effect expiry times (Phaser clock ms)
+  private shieldEndTime: number = 0;
+  private speedBoostEndTime: number = 0;
 
   constructor() {
     super({ key: 'Game' });
@@ -94,10 +100,16 @@ export class Game extends Phaser.Scene {
       if (document.pointerLockElement === this.game.canvas) document.exitPointerLock();
     });
 
+    // Reset effect timers
+    this.shieldEndTime = 0;
+    this.speedBoostEndTime = 0;
+    this.pickupSpawnTimer = 0;
+
     // Create groups
     this.enemies = this.physics.add.group();
     this.projectiles = this.physics.add.group();
     this.xpGems = this.physics.add.group();
+    this.pickups = this.physics.add.group();
 
     // Collisions
     this.physics.add.overlap(
@@ -118,6 +130,13 @@ export class Game extends Phaser.Scene {
       this.player,
       this.xpGems,
       (obj1, obj2) => this.handleXPGemCollection(obj1 as Phaser.GameObjects.GameObject, obj2 as Phaser.GameObjects.GameObject),
+      undefined,
+      this
+    );
+    this.physics.add.overlap(
+      this.player,
+      this.pickups,
+      (obj1, obj2) => this.handlePickupCollect(obj1 as Phaser.GameObjects.GameObject, obj2 as Phaser.GameObjects.GameObject),
       undefined,
       this
     );
@@ -262,10 +281,17 @@ export class Game extends Phaser.Scene {
       }
     };
     make('playerTex', 40, 0xffff00, 20);   // 40×40 yellow circle
-    make('enemyTex', 30, 0xff0000, 15);    // 30×30 red circle
+    make('enemyTex', 30, 0xff0000, 15);    // 30×30 red grunt
+    make('speederTex', 16, 0xff8800, 8);   // 16×16 orange speeder
+    make('tankTex', 50, 0x8b0000, 25);     // 50×50 dark-red tank
     make('projTex', 10, 0x00aaff, 5);      // 10×10 blue circle
     make('gemTex', 20, 0x00ff00, 10);      // 20×20 green circle
     make('particle', 8, 0xffffff, 4);      // 8×8 white circle (death particles)
+    // Pickup textures
+    make('pickupHeal',   26, 0x00ff66, 13);
+    make('pickupShield', 26, 0x00eeff, 13);
+    make('pickupBomb',   26, 0xff6600, 13);
+    make('pickupSpeed',  26, 0x4488ff, 13);
   }
 
   update(time: number, delta: number): void {
@@ -300,11 +326,21 @@ export class Game extends Phaser.Scene {
     // Update enemies AI
     this.updateEnemies(deltaSeconds);
 
-    // Spawn enemies periodically
+    // Spawn enemies — interval shrinks with difficulty
+    const spawnInterval = this.getDifficultyScale().spawnInterval;
     this.spawnTimer += deltaSeconds;
-    if (this.spawnTimer >= 0.5) { // spawn every 0.5 seconds for faster gameplay
+    if (this.spawnTimer >= spawnInterval) {
       this.spawnEnemy();
+      // At high difficulty spawn a second enemy in the same tick
+      if (this.getDifficultyScale().doubleSpawn) this.spawnEnemy();
       this.spawnTimer = 0;
+    }
+
+    // Spawn temporary pickups every ~12 seconds
+    this.pickupSpawnTimer += deltaSeconds;
+    if (this.pickupSpawnTimer >= 12) {
+      this.spawnPickup();
+      this.pickupSpawnTimer = 0;
     }
 
     // Auto-fire at nearest enemy
@@ -348,69 +384,92 @@ export class Game extends Phaser.Scene {
     targetX = Phaser.Math.Clamp(targetX, 0, this.scale.width);
     targetY = Phaser.Math.Clamp(targetY, 0, this.scale.height);
 
-    // Velocity-based movement: physics engine moves the body, sprite follows.
-    // setCollideWorldBounds keeps the player inside the arena.
-    const speed = this.gameState.playerStats.moveSpeed;
     const dx = targetX - this.player.x;
     const dy = targetY - this.player.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance > 2) {
-      this.player.setVelocity((dx / distance) * speed, (dy / distance) * speed);
-    } else {
+
+    if (distance < 4) {
       this.player.setVelocity(0, 0);
+    } else {
+      // Distance-proportional speed: v = distance * k, capped at a maximum.
+      // This gives fast catch-up when the cursor is far away and smooth
+      // deceleration as the player closes in — no more "always behind" lag.
+      // k=6 is the responsiveness tuning constant.
+      const k = 6;
+      const speedBoostMult = this.time.now < this.speedBoostEndTime ? 1.5 : 1;
+      const maxSpeed = this.gameState.playerStats.moveSpeed * 3 * speedBoostMult; // 600 px/s base
+      const speed = Math.min(distance * k, maxSpeed);
+      this.player.setVelocity((dx / distance) * speed, (dy / distance) * speed);
     }
 
     // Update global position
     this.gameState.playerPos = { x: this.player.x, y: this.player.y };
   }
 
-  private updateEnemies(_deltaSeconds: number): void {
+  private updateEnemies(deltaSeconds: number): void {
     const playerX = this.player.x;
     const playerY = this.player.y;
+    const now = this.time.now;
     this.enemies.getChildren().forEach((child: Phaser.GameObjects.GameObject) => {
       const enemy = child as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
       const dx = playerX - enemy.x;
       const dy = playerY - enemy.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance > 0) {
-        const speed = 100;
-        enemy.setVelocity((dx / distance) * speed, (dy / distance) * speed);
+      if (distance === 0) return;
+
+      const baseSpeed: number = (enemy as any).speed ?? 100;
+      const type: string = (enemy as any).enemyType ?? 'grunt';
+
+      let vx = (dx / distance) * baseSpeed;
+      let vy = (dy / distance) * baseSpeed;
+
+      // Speeder: weaves side-to-side with a fast sine offset
+      if (type === 'speeder') {
+        const phase: number = (enemy as any).wavePhase ?? ((enemy as any).wavePhase = Math.random() * Math.PI * 2);
+        (enemy as any).wavePhase += deltaSeconds * 4;
+        const perp = Math.sin((enemy as any).wavePhase) * baseSpeed * 0.6;
+        // perpendicular direction (rotate 90°)
+        vx += (-dy / distance) * perp;
+        vy += ( dx / distance) * perp;
       }
+
+      enemy.setVelocity(vx, vy);
     });
   }
 
   private spawnEnemy(): void {
+    const { width, height } = this.scale;
     const side = Phaser.Math.Between(0, 3);
     let x = 0, y = 0;
-    const width = this.scale.width;
-    const height = this.scale.height;
     switch (side) {
-      case 0: // top
-        x = Phaser.Math.Between(0, width);
-        y = -20;
-        break;
-      case 1: // right
-        x = width + 20;
-        y = Phaser.Math.Between(0, height);
-        break;
-      case 2: // bottom
-        x = Phaser.Math.Between(0, width);
-        y = height + 20;
-        break;
-      case 3: // left
-        x = -20;
-        y = Phaser.Math.Between(0, height);
-        break;
+      case 0: x = Phaser.Math.Between(0, width); y = -30; break;
+      case 1: x = width + 30; y = Phaser.Math.Between(0, height); break;
+      case 2: x = Phaser.Math.Between(0, width); y = height + 30; break;
+      case 3: x = -30; y = Phaser.Math.Between(0, height); break;
     }
-    const enemy = this.enemies.create(x, y, 'enemyTex') as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
-    enemy.setCircle(15, 0, 0);
+    const diff = this.getDifficultyScale();
+    const type = this.chooseEnemyType();
+
+    type EnemyDef = { tex: string; radius: number; hp: number; speed: number; damage: number; xp: number };
+    const defs: Record<string, EnemyDef> = {
+      grunt:   { tex: 'enemyTex',   radius: 15, hp: 20,  speed: 100, damage: 15, xp: 25 },
+      speeder: { tex: 'speederTex', radius:  8, hp: 10,  speed: 200, damage: 10, xp: 20 },
+      tank:    { tex: 'tankTex',    radius: 25, hp: 80,  speed:  50, damage: 30, xp: 60 },
+    };
+    const def = defs[type];
+
+    const enemy = this.enemies.create(x, y, def.tex) as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
+    enemy.setCircle(def.radius, 0, 0);
     (enemy.body as Phaser.Physics.Arcade.Body).syncBounds = false;
     enemy.body.setAllowGravity(false);
-    // Store health as a property
-    (enemy as any).health = 20;
-    (enemy as any).maxHealth = 20;
-    (enemy as any).xpDrop = 25; // Increased XP for faster testing
-    (enemy as any).damage = 15;
+
+    const hp = Math.round(def.hp * diff.hpMult);
+    (enemy as any).health    = hp;
+    (enemy as any).maxHealth = hp;
+    (enemy as any).speed     = def.speed * diff.speedMult;
+    (enemy as any).damage    = Math.round(def.damage * diff.damageMult);
+    (enemy as any).xpDrop    = def.xp;
+    (enemy as any).enemyType = type;
   }
 
   private fireAtNearestEnemy(): void {
@@ -553,6 +612,7 @@ export class Game extends Phaser.Scene {
     const now = this.time.now;
     // Cooldown of 1 second between hits
     if (now - this.lastHitTime < 1000) return;
+    if (now < this.shieldEndTime) return; // shield active — absorb hit
     this.lastHitTime = now;
     const damage = (enemy as any).damage || 10;
     this.gameState.playerStats.health -= damage;
@@ -795,5 +855,82 @@ export class Game extends Phaser.Scene {
     // Return to title screen
     this.scene.stop();
     this.scene.start('MainMenu');
+  }
+
+  // ── Difficulty scaling ────────────────────────────────────────────────────
+  private getDifficultyScale(): { hpMult: number; speedMult: number; damageMult: number; spawnInterval: number; doubleSpawn: boolean } {
+    const t = this.gameState.elapsedSeconds;
+    const scale = 1 + t / 60;           // 1.0 at 0s → 2.0 at 60s → 3.0 at 120s
+    return {
+      hpMult:        scale,
+      speedMult:     Math.min(scale, 2.5),        // cap so game stays playable
+      damageMult:    scale,
+      spawnInterval: Math.max(0.5, 2.0 / scale),  // 2s → 0.5s floor
+      doubleSpawn:   t >= 120,
+    };
+  }
+
+  // ── Enemy-type selection ──────────────────────────────────────────────────
+  private chooseEnemyType(): 'grunt' | 'speeder' | 'tank' {
+    const t = this.gameState.elapsedSeconds;
+    const r = Math.random();
+    if (t < 30) return 'grunt';
+    if (t < 60) return r < 0.30 ? 'speeder' : 'grunt';
+    return r < 0.10 ? 'tank' : r < 0.40 ? 'speeder' : 'grunt';
+  }
+
+  // ── Pickups ───────────────────────────────────────────────────────────────
+  private spawnPickup(): void {
+    const types = ['heal', 'shield', 'bomb', 'speed'] as const;
+    const type  = types[Phaser.Math.Between(0, types.length - 1)];
+    const texMap: Record<string, string> = {
+      heal: 'pickupHeal', shield: 'pickupShield', bomb: 'pickupBomb', speed: 'pickupSpeed',
+    };
+    const x = Phaser.Math.Between(60, this.scale.width  - 60);
+    const y = Phaser.Math.Between(60, this.scale.height - 60);
+    const pickup = this.pickups.create(x, y, texMap[type]) as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
+    pickup.setCircle(13, 0, 0);
+    (pickup.body as Phaser.Physics.Arcade.Body).syncBounds = false;
+    pickup.body.setAllowGravity(false);
+    (pickup as any).pickupType = type;
+
+    // Blink warning at 6s, auto-destroy at 8s
+    this.time.delayedCall(6000, () => {
+      if (!pickup.active) return;
+      this.tweens.add({ targets: pickup, alpha: 0.1, duration: 200, yoyo: true, repeat: -1 });
+    });
+    this.time.delayedCall(8000, () => { if (pickup.active) pickup.destroy(); });
+  }
+
+  private handlePickupCollect(_player: Phaser.GameObjects.GameObject, pickupObj: Phaser.GameObjects.GameObject): void {
+    const pickup = pickupObj as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
+    const type: string = (pickup as any).pickupType ?? 'heal';
+    pickup.destroy();
+
+    switch (type) {
+      case 'heal': {
+        const healAmt = Math.round(this.gameState.playerStats.maxHealth * 0.25);
+        this.gameState.playerStats.health = Math.min(
+          this.gameState.playerStats.maxHealth,
+          this.gameState.playerStats.health + healAmt
+        );
+        break;
+      }
+      case 'shield':
+        this.shieldEndTime = this.time.now + 8000;
+        break;
+      case 'bomb':
+        this.enemies.getChildren().slice().forEach(child => {
+          const e = child as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
+          this.spawnDeathParticles(e.x, e.y);
+          this.spawnXPGem(e.x, e.y, (e as any).xpDrop ?? 25);
+          this.gameState.kills += 1;
+          e.destroy();
+        });
+        break;
+      case 'speed':
+        this.speedBoostEndTime = this.time.now + 8000;
+        break;
+    }
   }
 }
