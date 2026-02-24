@@ -310,10 +310,8 @@ function createDOMOverlay(): void {
       // Reset game state for fresh run (this sets phase to 'start')
       resetGameState();
 
-      // Start the game scene
-      const gameScene = window.game.scene.getScene('Game');
-      console.log('Current game scene:', gameScene);
-      if (gameScene) {
+      // Stop Game only if it's actually running (e.g. attract mode was active)
+      if (window.game.scene.isActive('Game')) {
         window.game.scene.stop('Game');
       }
 
@@ -323,6 +321,7 @@ function createDOMOverlay(): void {
         window.attractModeActive = false;
         window.attractModeEnded = false;
         console.log('Starting Game scene...');
+        window.game.scene.stop('MainMenu');
         window.game.scene.start('Game');
       }, 50);
     });
@@ -394,6 +393,8 @@ const config: Phaser.Types.Core.GameConfig = {
   height: 600,
   backgroundColor: '#222222',
   parent: document.getElementById('game-container') ?? undefined,
+  // Keep game loop running even in headless / background tabs
+  disableVisibilityChange: true,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

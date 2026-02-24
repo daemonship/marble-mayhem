@@ -242,16 +242,15 @@ export class Game extends Phaser.Scene {
     targetX = Phaser.Math.Clamp(targetX, bounds.left, bounds.right);
     targetY = Phaser.Math.Clamp(targetY, bounds.top, bounds.bottom);
 
-    // Move player towards target with speed
+    // Move player towards target with speed — cap at distance to prevent overshoot
     const speed = this.gameState.playerStats.moveSpeed;
     const dx = targetX - this.player.x;
     const dy = targetY - this.player.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     if (distance > 1) {
-      const moveX = (dx / distance) * speed * deltaSeconds;
-      const moveY = (dy / distance) * speed * deltaSeconds;
-      this.player.x += moveX;
-      this.player.y += moveY;
+      const step = Math.min(speed * deltaSeconds, distance);
+      this.player.x += (dx / distance) * step;
+      this.player.y += (dy / distance) * step;
     }
 
     // Update global position

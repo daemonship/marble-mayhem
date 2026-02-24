@@ -98,9 +98,10 @@ export class MainMenu extends Phaser.Scene {
       resetGameState();
     }
 
-    // Start the game scene with attract mode flag
+    // Start the game scene with attract mode flag — stop MainMenu first so only one scene runs
     (window as any).attractModeActive = true;
-    this.scene.start('Game');
+    window.game.scene.stop('MainMenu');
+    window.game.scene.start('Game');
   }
 
   private returnToTitle(): void {
