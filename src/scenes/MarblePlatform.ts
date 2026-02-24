@@ -17,7 +17,8 @@ export class MarblePlatform extends Phaser.Scene {
   private charging  = false;
   private chargeT0  = 0;      // time charging started (ms)
   private hudText!: Phaser.GameObjects.Text;
-  private chargeGfx!: Phaser.GameObjects.Graphics;
+  private chargeGfx!: Phaser.GameObjects.Graphics;  // screen-space: charge bar
+  private glowGfx!: Phaser.GameObjects.Graphics;    // world-space: energy aura around marble
   private goalReached = false;
 
   // Springs: visual + trigger zone
@@ -35,7 +36,7 @@ export class MarblePlatform extends Phaser.Scene {
   private readonly GRAVITY     = 980;   // extra downward gravity (px/s²)
   private readonly ACCEL_X     = 700;   // horizontal acceleration while key held
   private readonly MAX_VX      = 420;   // max horizontal speed
-  private readonly ROLL_DRAG   = 0.85;  // velocity × this per frame when no key (rolling friction)
+  private readonly ROLL_DRAG   = 0.93;  // velocity × this per frame when no key (rolling friction)
   private readonly JUMP_MIN    = 330;   // tap-jump launch speed
   private readonly JUMP_MAX    = 740;   // full-charge launch speed
   private readonly MAX_CHARGE  = 650;   // ms to reach full charge
@@ -315,8 +316,9 @@ export class MarblePlatform extends Phaser.Scene {
   // ── HUD ───────────────────────────────────────────────────────────────────
   private buildHUD(): void {
     const s = { fontSize: '13px', fontFamily: 'monospace', color: '#e2e8f0', stroke: '#000', strokeThickness: 3 };
-    this.hudText  = this.add.text(10, 10, '', s).setScrollFactor(0).setDepth(50);
+    this.hudText   = this.add.text(10, 10, '', s).setScrollFactor(0).setDepth(50);
     this.chargeGfx = this.add.graphics().setScrollFactor(0).setDepth(50);
+    this.glowGfx   = this.add.graphics().setDepth(9);   // world-space, drawn under marble
 
     this.add.text(400, 593,
       'A / ←  roll    D / →  roll    SPACE  hold to charge jump, release to launch',
@@ -355,8 +357,8 @@ export class MarblePlatform extends Phaser.Scene {
       body.setAccelerationX(this.ACCEL_X);
     } else {
       body.setAccelerationX(0);
-      // Rolling friction: decelerate when no key held
-      if (grounded && Math.abs(body.velocity.x) > 4) {
+      // Rolling friction: decelerate when no key held — higher ROLL_DRAG = more momentum
+      if (grounded && Math.abs(body.velocity.x) > 1) {
         body.setVelocityX(body.velocity.x * Math.pow(this.ROLL_DRAG, delta / 16.67));
       } else if (grounded) {
         body.setVelocityX(0);
@@ -374,9 +376,17 @@ export class MarblePlatform extends Phaser.Scene {
     if (this.charging) {
       const t = Math.min((time - this.chargeT0) / this.MAX_CHARGE, 1);
 
-      // Squish marble visually as charge builds
+      // ── Jiggle + squish while charging ────────────────────────────────
+      // Frequency climbs from ~8 Hz to ~28 Hz; amplitude grows with charge.
+      // Two out-of-phase oscillators (x/y) create "shaking" not just pulsing.
       if (!this.goalReached) {
-        this.marble.setScale(1 + t * 0.32, 1 - t * 0.26);
+        const jiggleFreq = (0.014 + t * 0.038);     // radians per ms
+        const jiggleAmp  = t * 0.07;                 // max ±7% scale deviation
+        const jX =  Math.sin(time * jiggleFreq)        * jiggleAmp;
+        const jY =  Math.sin(time * jiggleFreq * 1.31) * jiggleAmp;
+        const baseX = 1 + t * 0.28;
+        const baseY = 1 - t * 0.22;
+        this.marble.setScale(baseX + jX, baseY + jY);
       }
 
       if (!space.isDown || t >= 1) {
@@ -385,11 +395,11 @@ export class MarblePlatform extends Phaser.Scene {
         body.setVelocityY(-jumpV);
         this.charging = false;
 
-        // Spring-back pop
+        // Spring-back pop — brief stretch opposite to squish direction
         this.tweens.add({
           targets: this.marble,
-          scaleX: 1 - t * 0.18, scaleY: 1 + t * 0.22,
-          duration: 55, yoyo: true,
+          scaleX: 1 - t * 0.22, scaleY: 1 + t * 0.28,
+          duration: 60, yoyo: true,
           onComplete: () => this.marble.setScale(1),
         });
       }
@@ -429,6 +439,35 @@ export class MarblePlatform extends Phaser.Scene {
     // ── Death / respawn ──────────────────────────────────────────────────
     if (this.marble.y > this.GROUND_Y + 160) {
       this.respawn();
+    }
+
+    // ── Energy aura (world-space glow around marble while charging) ───────
+    this.glowGfx.clear();
+    if (this.charging) {
+      const t    = Math.min((time - this.chargeT0) / this.MAX_CHARGE, 1);
+      const mx   = this.marble.x;
+      const my   = this.marble.y;
+
+      // Color ramp: blue → amber → red as charge fills
+      const color = t < 0.5 ? 0x3b82f6 : t < 0.85 ? 0xf59e0b : 0xef4444;
+
+      // Outer halo pulses in and out (slow breathe)
+      const pulse     = Math.sin(time * 0.009) * 0.5 + 0.5;
+      const outerR    = this.R + 6 + t * 18 + pulse * 5;
+      this.glowGfx.fillStyle(color, (0.12 + t * 0.22) * (0.6 + pulse * 0.4));
+      this.glowGfx.fillCircle(mx, my, outerR);
+
+      // Inner ring — tighter, more opaque
+      const innerR    = this.R + 1 + t * 7;
+      this.glowGfx.fillStyle(color, 0.35 + t * 0.35);
+      this.glowGfx.fillCircle(mx, my, innerR);
+
+      // Core flash at full charge
+      if (t >= 1) {
+        const flash = Math.sin(time * 0.03) * 0.5 + 0.5;
+        this.glowGfx.fillStyle(0xffffff, 0.25 * flash);
+        this.glowGfx.fillCircle(mx, my, this.R - 2);
+      }
     }
 
     // ── Charge bar ───────────────────────────────────────────────────────
