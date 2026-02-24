@@ -17,6 +17,7 @@ declare global {
 
 import Phaser from 'phaser';
 import { MarbleTest } from './scenes/MarbleTest';
+import { MarblePlatform } from './scenes/MarblePlatform';
 import { Boot } from './scenes/Boot';
 import { Preload } from './scenes/Preload';
 import { MainMenu } from './scenes/MainMenu';
@@ -424,7 +425,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [MarbleTest, Boot, Preload, MainMenu, Game, GameOver],
+  scene: [MarblePlatform, MarbleTest, Boot, Preload, MainMenu, Game, GameOver],
 };
 
 const game = new Phaser.Game(config);
