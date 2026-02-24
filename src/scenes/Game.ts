@@ -22,6 +22,9 @@ export class Game extends Phaser.Scene {
   private pendingUpgrades: UpgradeOption[] = [];
   private attractMode!: AttractMode;
   private mouseActive: boolean = true;
+  private mouseX: number = 400;
+  private mouseY: number = 300;
+  private mouseMoveHandler?: (e: MouseEvent) => void;
 
   constructor() {
     super({ key: 'Game' });
@@ -213,11 +216,6 @@ export class Game extends Phaser.Scene {
 
     // Update global gameState for testing
     this.updateGameState();
-
-    // DEBUG
-    if (this.debugText?.active) {
-      this.debugText.setText(`ptr: ${Math.floor(this.pointer.x)},${Math.floor(this.pointer.y)}  active:${this.mouseActive}  player: ${Math.floor(this.player.x)},${Math.floor(this.player.y)}`);
-    }
 
     // Apply health regen if any
     if (this.gameState.playerStats.healthRegen > 0) {
