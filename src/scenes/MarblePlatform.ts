@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { LevelDef } from '../types/LevelDef';
+import { world1_level1 } from '../levels/world1_level1';
 
 // Marble Platform — side-scroller movement POC
 // Goal: does rolling + charge-jumping + parallax feel fun as a side-scroller?
@@ -14,6 +16,8 @@ export class MarblePlatform extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: { A: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
 
+  private levelDef!: LevelDef;
+
   private charging    = false;
   private chargeT0    = 0;      // time charging started (ms)
   private hudText!: Phaser.GameObjects.Text;
@@ -26,15 +30,11 @@ export class MarblePlatform extends Phaser.Scene {
   private prevLeft  = false;
   private prevRight = false;
 
-  // Springs: visual + trigger zone
-  private springs: Array<{ x: number; y: number; sprite: Phaser.GameObjects.Image }> = [];
+  // Springs: visual + trigger zone (populated from levelDef.springs in buildLevel)
+  private springs: Array<{ x: number; y: number; power: number; sprite: Phaser.GameObjects.Image }> = [];
 
   // Parallax tile sprites (updated every frame)
   private pxLayers: Array<{ ts: Phaser.GameObjects.TileSprite; factor: number }> = [];
-
-  // ── World ─────────────────────────────────────────────────────────────────
-  private readonly WORLD_W   = 5200;
-  private readonly GROUND_Y  = 528;   // top of the main ground surface
 
   // ── Marble physics knobs ──────────────────────────────────────────────────
   private readonly R           = 18;    // marble radius
@@ -51,12 +51,13 @@ export class MarblePlatform extends Phaser.Scene {
   constructor() { super({ key: 'MarblePlatform' }); }
 
   create(): void {
-    this.physics.world.setBounds(0, -200, this.WORLD_W, 900);
-    this.cameras.main.setBounds(0, -200, this.WORLD_W, 900);
+    this.levelDef = world1_level1;
+    this.physics.world.setBounds(0, -200, this.levelDef.worldW, 900);
+    this.cameras.main.setBounds(0, -200, this.levelDef.worldW, 900);
 
     this.buildParallax();
     this.buildTextures();
-    this.buildLevel();
+    this.buildLevel(this.levelDef);
     this.buildMarble();
     this.buildHUD();
     this.setupInput();
@@ -237,73 +238,44 @@ export class MarblePlatform extends Phaser.Scene {
   }
 
   // ── Level ─────────────────────────────────────────────────────────────────
-  private buildLevel(): void {
+  private buildLevel(def: LevelDef): void {
     this.platforms = this.physics.add.staticGroup();
-    const G = this.GROUND_Y;
 
-    //  Helper: add a visible tiled platform + matching static physics body.
-    //  Must use platforms.create() (not physics.add.staticImage + add()) so
-    //  the body is properly registered with the group and found by the collider.
-    const plat = (x: number, y: number, w: number, h = 32) => {
-      // Visual: tileSprite tiles the texture at native resolution
+    // Helper: add a visible tiled platform + matching static physics body.
+    // Must use platforms.create() (not physics.add.staticImage + add()) so
+    // the body is properly registered with the group and found by the collider.
+    // x/y are the TOP-LEFT corner of the platform (matching LevelDef convention).
+    const plat = (x: number, y: number, w: number, h: number) => {
       this.add.tileSprite(x + w / 2, y + h / 2, w, h, 'platTex').setDepth(4);
-      // Physics: created through the group so the collider can find it
       const pb = this.platforms.create(x + w / 2, y + h / 2, 'platTex') as Phaser.Types.Physics.Arcade.SpriteWithStaticBody;
       pb.setDisplaySize(w, h).setVisible(false);
       pb.refreshBody();
     };
 
-    // ── Ground sections (gaps between them test jumping) ─────────────────
-    plat(0,    G, 560);           // spawn area — wide, safe
-    plat(620,  G, 300);           // gap: 60px — easy first hop
-    plat(980,  G, 260);           // gap: 60px
-    plat(1320, G, 200);           // gap: 80px — gap before step section
-    plat(1700, G, 800);           // long safe stretch (springs here)
-    plat(2620, G, 220);
-    plat(2960, G, 220);
-    plat(3340, G, 1860);          // final long stretch to goal
+    for (const p of def.platforms) {
+      plat(p.x, p.y, p.w, p.h);
+    }
 
-    // ── Step platforms (ascending, teach charge jump) ─────────────────────
-    plat(1340, G - 90,  160);     // one step up
-    plat(1560, G - 175, 160);     // two steps up
-    plat(1760, G - 95,  160, 24); // partial step back down
+    for (const sp of def.springs) {
+      const sprite = this.add.image(sp.x, sp.y, 'springTex').setDepth(5).setOrigin(0.5, 1);
+      this.springs.push({ x: sp.x, y: sp.y, power: sp.power ?? this.SPRING_V, sprite });
+    }
 
-    // ── Floating islands (mid-air, harder to reach) ───────────────────────
-    plat(700,  G - 120, 140, 24); // early secret shelf
-    plat(1060, G - 150, 120, 24); // over the gap
-    plat(2000, G - 200, 180, 24); // high platform — full-charge only
-    plat(2260, G - 130, 140, 24);
-    plat(2700, G - 180, 140, 24);
-    plat(3000, G - 240, 160, 24); // very high — chain jumps
-    plat(3260, G - 165, 140, 24);
+    // Goal marker
+    this.add.image(def.goal.x, def.goal.y, 'goalTex').setDepth(5).setOrigin(0.5, 1);
 
-    // ── Ceiling shelf (hidden above, explore with spring) ─────────────────
-    plat(1900, G - 330, 300, 20);
-
-    // ── Spring pads ───────────────────────────────────────────────────────
-    this.addSpring(530,  G - 28);   // just before first gap — launch to shelf
-    this.addSpring(1710, G - 28);   // start of long stretch — reach ceiling shelf
-    this.addSpring(2940, G - 28);
-
-    // ── Goal marker ───────────────────────────────────────────────────────
-    this.add.image(5080, G - 80, 'goalTex').setDepth(5).setOrigin(0.5, 1);
-
-    // ── Decorative floor under world (death plane visual) ─────────────────
+    // Decorative floor under world (death plane visual)
+    const G = def.groundY;
     const deco = this.add.graphics().setDepth(2);
     deco.fillStyle(0x111827);
-    deco.fillRect(0, G + 32, this.WORLD_W, 300);
+    deco.fillRect(0, G + 32, def.worldW, 300);
     deco.fillStyle(0x1f2937);
-    deco.fillRect(0, G + 32, this.WORLD_W, 6);
-  }
-
-  private addSpring(x: number, y: number): void {
-    const sprite = this.add.image(x, y, 'springTex').setDepth(5).setOrigin(0.5, 1);
-    this.springs.push({ x, y, sprite });
+    deco.fillRect(0, G + 32, def.worldW, 6);
   }
 
   // ── Marble ────────────────────────────────────────────────────────────────
   private buildMarble(): void {
-    this.marble = this.physics.add.sprite(80, this.GROUND_Y - this.R * 2, 'marbTex');
+    this.marble = this.physics.add.sprite(this.levelDef.spawnX, this.levelDef.spawnY, 'marbTex');
     this.marble.setDepth(10);
 
     const body = this.marble.body as Phaser.Physics.Arcade.Body;
@@ -432,7 +404,7 @@ export class MarblePlatform extends Phaser.Scene {
         const dx = Math.abs(this.marble.x - sp.x);
         const dy = Math.abs(this.marble.y - sp.y);        // marble bottom ≈ marble.y + R
         if (dx < 22 && dy < this.R + 14) {
-          body.setVelocityY(-this.SPRING_V);
+          body.setVelocityY(-sp.power);
           this.tweens.add({ targets: sp.sprite, scaleY: 0.45, duration: 70, yoyo: true });
           break;
         }
@@ -446,13 +418,13 @@ export class MarblePlatform extends Phaser.Scene {
     }
 
     // ── Goal check ───────────────────────────────────────────────────────
-    if (!this.goalReached && this.marble.x > 5050) {
+    if (!this.goalReached && this.marble.x > this.levelDef.goal.x - 30) {
       this.goalReached = true;
       this.showGoalMessage();
     }
 
     // ── Death / respawn ──────────────────────────────────────────────────
-    if (this.marble.y > this.GROUND_Y + 160) {
+    if (this.marble.y > this.levelDef.groundY + 160) {
       this.respawn();
     }
 
@@ -516,7 +488,7 @@ export class MarblePlatform extends Phaser.Scene {
     this.charging = false;
     this.marble.setScale(1);
     const body = this.marble.body as Phaser.Physics.Arcade.Body;
-    body.reset(80, this.GROUND_Y - this.R * 2);
+    body.reset(this.levelDef.spawnX, this.levelDef.spawnY);
     // Flash
     this.tweens.add({
       targets: this.marble, alpha: 0.2, duration: 90,
@@ -527,7 +499,7 @@ export class MarblePlatform extends Phaser.Scene {
 
   private showGoalMessage(): void {
     const txt = this.add.text(
-      this.marble.x, this.GROUND_Y - 120,
+      this.marble.x, this.levelDef.groundY - 120,
       '🎉  YOU MADE IT!\nFeel good?',
       { fontSize: '28px', fontFamily: 'monospace', color: '#fbbf24', stroke: '#000', strokeThickness: 5, align: 'center' },
     ).setOrigin(0.5).setDepth(60);
