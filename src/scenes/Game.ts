@@ -12,7 +12,6 @@ export class Game extends Phaser.Scene {
   private projectiles!: Phaser.Physics.Arcade.Group;
   private xpGems!: Phaser.Physics.Arcade.Group;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  private pointer!: Phaser.Input.Pointer;
   private spawnTimer: number = 0;
   private fireTimer: number = 0;
   private gameState: GameState;
@@ -21,6 +20,9 @@ export class Game extends Phaser.Scene {
   private isPaused: boolean = false;
   private pendingUpgrades: UpgradeOption[] = [];
   private attractMode!: AttractMode;
+  private mouseX: number = 400;
+  private mouseY: number = 300;
+  private mouseMoveHandler?: (e: MouseEvent) => void;
 
   constructor() {
     super({ key: 'Game' });
@@ -40,20 +42,34 @@ export class Game extends Phaser.Scene {
     this.gameState.playerPos = { x: 400, y: 300 };
     this.isPaused = false;
 
-    // Create particle texture for death effects
-    this.createParticleTexture();
+    // Create all game textures at proper sizes (avoids Phaser 3.90 body-scale bug)
+    this.createGameTextures();
 
-    // Create player sprite (a yellow circle)
-    this.player = this.physics.add.sprite(400, 300, 'pixel');
-    this.player.setCircle(20);
-    this.player.setDisplaySize(40, 40);
-    this.player.setTint(0xffff00);
+    // Create player sprite using properly-sized texture (scaleX=1 → body.halfWidth=radius)
+    this.player = this.physics.add.sprite(400, 300, 'playerTex');
+    this.player.setCircle(20, 0, 0);
+    (this.player.body as Phaser.Physics.Arcade.Body).syncBounds = false;
+    this.player.body.setAllowGravity(false);
     this.player.setCollideWorldBounds(true);
 
     // Input
     this.cursors = this.input.keyboard!.createCursorKeys();
-    // Phaser FIT mode handles coordinate scaling — use native pointer directly
-    this.pointer = this.input.activePointer;
+
+    // Track mouse on window (not just canvas) so events fire in the black margins.
+    // Use Phaser's displayScale to convert screen coords → game coords.
+    this.mouseMoveHandler = (e: MouseEvent) => {
+      const rect = this.game.canvas.getBoundingClientRect();
+      // Convert CSS pixel offset to game coordinates using canvas rect dimensions.
+      // Avoids DPR issues with this.scale.displayScale which includes physical pixels.
+      const scaleX = rect.width > 0 ? this.scale.width / rect.width : 1;
+      const scaleY = rect.height > 0 ? this.scale.height / rect.height : 1;
+      this.mouseX = (e.clientX - rect.left) * scaleX;
+      this.mouseY = (e.clientY - rect.top) * scaleY;
+    };
+    window.addEventListener('mousemove', this.mouseMoveHandler);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.mouseMoveHandler) window.removeEventListener('mousemove', this.mouseMoveHandler);
+    });
 
     // Create groups
     this.enemies = this.physics.add.group();
@@ -152,15 +168,24 @@ export class Game extends Phaser.Scene {
     });
   }
 
-  private createParticleTexture(): void {
-    // Create a simple particle texture if not exists
-    if (!this.textures.exists('particle')) {
-      const graphics = this.add.graphics();
-      graphics.fillStyle(0xffffff);
-      graphics.fillCircle(4, 4, 4);
-      graphics.generateTexture('particle', 8, 8);
-      graphics.destroy();
-    }
+  private createGameTextures(): void {
+    // Create properly-sized textures so sprite.scaleX=1 and physics body
+    // dimensions match the logical radius (avoids Phaser 3.90 bug where
+    // body.halfWidth = radius * sprite.scaleX when using 1×1 'pixel' texture).
+    const make = (key: string, size: number, color: number, radius: number) => {
+      if (!this.textures.exists(key)) {
+        const g = this.add.graphics();
+        g.fillStyle(color);
+        g.fillCircle(radius, radius, radius);
+        g.generateTexture(key, size, size);
+        g.destroy();
+      }
+    };
+    make('playerTex', 40, 0xffff00, 20);   // 40×40 yellow circle
+    make('enemyTex', 30, 0xff0000, 15);    // 30×30 red circle
+    make('projTex', 10, 0x00aaff, 5);      // 10×10 blue circle
+    make('gemTex', 20, 0x00ff00, 10);      // 20×20 green circle
+    make('particle', 8, 0xffffff, 4);      // 8×8 white circle (death particles)
   }
 
   update(time: number, delta: number): void {
@@ -232,32 +257,31 @@ export class Game extends Phaser.Scene {
       targetX = botTarget.x;
       targetY = botTarget.y;
     } else {
-      // Phaser FIT mode keeps pointer.x/y in game coordinates (0–800, 0–600)
-      targetX = this.pointer.x;
-      targetY = this.pointer.y;
+      targetX = this.mouseX;
+      targetY = this.mouseY;
     }
 
-    // Clamp to world bounds (viewport)
-    const bounds = this.physics.world.bounds;
-    targetX = Phaser.Math.Clamp(targetX, bounds.left, bounds.right);
-    targetY = Phaser.Math.Clamp(targetY, bounds.top, bounds.bottom);
+    // Clamp mouse target to canvas bounds
+    targetX = Phaser.Math.Clamp(targetX, 0, this.scale.width);
+    targetY = Phaser.Math.Clamp(targetY, 0, this.scale.height);
 
-    // Move player towards target with speed — cap at distance to prevent overshoot
+    // Velocity-based movement: physics engine moves the body, sprite follows.
+    // setCollideWorldBounds keeps the player inside the arena.
     const speed = this.gameState.playerStats.moveSpeed;
     const dx = targetX - this.player.x;
     const dy = targetY - this.player.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance > 1) {
-      const step = Math.min(speed * deltaSeconds, distance);
-      this.player.x += (dx / distance) * step;
-      this.player.y += (dy / distance) * step;
+    if (distance > 2) {
+      this.player.setVelocity((dx / distance) * speed, (dy / distance) * speed);
+    } else {
+      this.player.setVelocity(0, 0);
     }
 
     // Update global position
     this.gameState.playerPos = { x: this.player.x, y: this.player.y };
   }
 
-  private updateEnemies(deltaSeconds: number): void {
+  private updateEnemies(_deltaSeconds: number): void {
     const playerX = this.player.x;
     const playerY = this.player.y;
     this.enemies.getChildren().forEach((child: Phaser.GameObjects.GameObject) => {
@@ -266,9 +290,8 @@ export class Game extends Phaser.Scene {
       const dy = playerY - enemy.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
       if (distance > 0) {
-        const speed = 100; // base speed
-        enemy.x += (dx / distance) * speed * deltaSeconds;
-        enemy.y += (dy / distance) * speed * deltaSeconds;
+        const speed = 100;
+        enemy.setVelocity((dx / distance) * speed, (dy / distance) * speed);
       }
     });
   }
@@ -296,10 +319,10 @@ export class Game extends Phaser.Scene {
         y = Phaser.Math.Between(0, height);
         break;
     }
-    const enemy = this.enemies.create(x, y, 'pixel') as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
-    enemy.setCircle(15);
-    enemy.setDisplaySize(30, 30);
-    enemy.setTint(0xff0000);
+    const enemy = this.enemies.create(x, y, 'enemyTex') as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
+    enemy.setCircle(15, 0, 0);
+    (enemy.body as Phaser.Physics.Arcade.Body).syncBounds = false;
+    enemy.body.setAllowGravity(false);
     // Store health as a property
     (enemy as any).health = 20;
     (enemy as any).maxHealth = 20;
@@ -339,10 +362,9 @@ export class Game extends Phaser.Scene {
   }
 
   private createProjectile(targetX: number, targetY: number): void {
-    const projectile = this.projectiles.create(this.player.x, this.player.y, 'pixel') as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
-    projectile.setCircle(5);
-    projectile.setDisplaySize(10, 10);
-    projectile.setTint(0x00aaff);
+    const projectile = this.projectiles.create(this.player.x, this.player.y, 'projTex') as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
+    projectile.setCircle(5, 0, 0);
+    (projectile.body as Phaser.Physics.Arcade.Body).syncBounds = false;
     // Set velocity towards target
     const dx = targetX - this.player.x;
     const dy = targetY - this.player.y;
@@ -438,6 +460,7 @@ export class Game extends Phaser.Scene {
   }
 
   private handleEnemyHit(_player: Phaser.GameObjects.GameObject, enemy: Phaser.GameObjects.GameObject): void {
+    if (this.isPaused) return; // don't take damage during upgrade selection
     const now = this.time.now;
     // Cooldown of 1 second between hits
     if (now - this.lastHitTime < 1000) return;
@@ -604,6 +627,11 @@ export class Game extends Phaser.Scene {
       
       // Hide modal and resume game
       this.hideLevelUpModal();
+      // Ensure player survives if health hit 0 during the same frame as level-up
+      if (this.gameState.playerStats.health <= 0) {
+        this.gameState.playerStats.health = 1;
+      }
+      this.lastHitTime = this.time.now; // 1-second invincibility window on resume
       this.isPaused = false;
       this.gameState.phase = 'playing';
     }
@@ -615,10 +643,9 @@ export class Game extends Phaser.Scene {
   }
 
   private spawnXPGem(x: number, y: number, amount: number): void {
-    const gem = this.xpGems.create(x, y, 'pixel') as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
-    gem.setCircle(10);
-    gem.setDisplaySize(20, 20);
-    gem.setTint(0x00ff00);
+    const gem = this.xpGems.create(x, y, 'gemTex') as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
+    gem.setCircle(10, 0, 0);
+    (gem.body as Phaser.Physics.Arcade.Body).syncBounds = false;
     (gem as any).xpValue = amount;
   }
 
