@@ -3,27 +3,31 @@ import { LevelDef, SurfaceType, PlatformDef } from '../types/LevelDef';
 import { sandbox } from '../levels/sandbox';
 
 // ── Surface physics table ─────────────────────────────────────────────────────
-// dragMultiplier  — multiplied against ROLL_DRAG coefficient (higher = more momentum)
+// drag            — absolute per-frame drag coefficient (NOT a multiplier on base drag)
+//                   applied as Math.pow(drag, delta/16.67). Higher = more momentum.
 // accelMultiplier — multiplied against ACCEL_X (how fast marble responds to keys)
 // maxVxMultiplier — caps MAX_VX (MUD slows the marble's top speed)
 // bounceY         — vertical restitution coefficient (BOUNCE_PAD = very high)
+// jumpMultiplier  — scales jump power (soft surfaces reduce jump height)
 interface SurfaceProps {
-  dragMultiplier:  number;
+  drag:            number;
   accelMultiplier: number;
   maxVxMultiplier: number;
   bounceY:         number;
+  jumpMultiplier:  number;
 }
 
 const SURFACE_PROPS: Record<SurfaceType, SurfaceProps> = {
-  [SurfaceType.CONCRETE]:   { dragMultiplier: 1.000, accelMultiplier: 1.00, maxVxMultiplier: 1.00, bounceY: 0.05 },
-  [SurfaceType.GRASS]:      { dragMultiplier: 0.970, accelMultiplier: 0.90, maxVxMultiplier: 1.00, bounceY: 0.08 },
-  [SurfaceType.SAND]:       { dragMultiplier: 0.750, accelMultiplier: 0.65, maxVxMultiplier: 1.00, bounceY: 0.02 },
-  [SurfaceType.MUD]:        { dragMultiplier: 0.550, accelMultiplier: 0.45, maxVxMultiplier: 0.40, bounceY: 0.00 },
-  [SurfaceType.ICE]:        { dragMultiplier: 0.999, accelMultiplier: 0.20, maxVxMultiplier: 1.00, bounceY: 0.05 },
-  [SurfaceType.SNOW]:       { dragMultiplier: 0.920, accelMultiplier: 0.75, maxVxMultiplier: 1.00, bounceY: 0.12 },
-  [SurfaceType.WET_METAL]:  { dragMultiplier: 0.985, accelMultiplier: 0.35, maxVxMultiplier: 1.00, bounceY: 0.05 },
-  [SurfaceType.BOUNCE_PAD]: { dragMultiplier: 1.000, accelMultiplier: 1.00, maxVxMultiplier: 1.00, bounceY: 0.82 },
-  [SurfaceType.CONVEYOR]:   { dragMultiplier: 1.000, accelMultiplier: 1.00, maxVxMultiplier: 1.00, bounceY: 0.05 },
+  //                          drag    accel   maxVx   bounceY  jump
+  [SurfaceType.CONCRETE]:   { drag: 0.930, accelMultiplier: 1.00, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 1.00 },
+  [SurfaceType.GRASS]:      { drag: 0.905, accelMultiplier: 0.90, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 0.92 },
+  [SurfaceType.SAND]:       { drag: 0.860, accelMultiplier: 0.65, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 0.80 },
+  [SurfaceType.MUD]:        { drag: 0.820, accelMultiplier: 0.45, maxVxMultiplier: 0.40, bounceY: 0.00, jumpMultiplier: 0.65 },
+  [SurfaceType.ICE]:        { drag: 0.998, accelMultiplier: 0.20, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 0.90 },
+  [SurfaceType.SNOW]:       { drag: 0.972, accelMultiplier: 0.75, maxVxMultiplier: 1.00, bounceY: 0.10, jumpMultiplier: 0.82 },
+  [SurfaceType.WET_METAL]:  { drag: 0.958, accelMultiplier: 0.35, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 0.95 },
+  [SurfaceType.BOUNCE_PAD]: { drag: 0.930, accelMultiplier: 1.00, maxVxMultiplier: 1.00, bounceY: 0.82, jumpMultiplier: 1.00 },
+  [SurfaceType.CONVEYOR]:   { drag: 0.930, accelMultiplier: 1.00, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 1.00 },
 };
 
 // Canvas colours per surface type: [main fill, top highlight, bottom shadow]
@@ -87,14 +91,13 @@ export class MarblePlatform extends Phaser.Scene {
   private levelDef!: LevelDef;
 
   // ── Core marble state ──────────────────────────────────────────────────────
-  private charging    = false;
-  private chargeT0    = 0;
-  private goalReached = false;
+  private charging           = false;
+  private chargeT0           = 0;
+  private chargeStartSurface: SurfaceType = SurfaceType.CONCRETE;
+  private goalReached        = false;
 
-  // Manual edge detection (JustDown() is unreliable on some Phaser builds)
+  // Space edge detection (JustDown() is unreliable on some Phaser builds)
   private prevSpace = false;
-  private prevLeft  = false;
-  private prevRight = false;
 
   // Respawn anchor — updated when a checkpoint is activated
   private respawnX = 0;
@@ -111,7 +114,6 @@ export class MarblePlatform extends Phaser.Scene {
   private readonly GRAVITY     = 980;
   private readonly ACCEL_X     = 700;
   private readonly MAX_VX      = 420;
-  private readonly ROLL_DRAG   = 0.93;
   private readonly JUMP_MIN    = 330;
   private readonly JUMP_MAX    = 740;
   private readonly MAX_CHARGE  = 650;
@@ -556,7 +558,7 @@ export class MarblePlatform extends Phaser.Scene {
     const surface = this.getSurface(grounded);
     this.updateSurface(body, grounded, surface, dt);
     this.updateMovement(body, grounded, surface, dt);
-    this.updateJump(time, body, grounded);
+    this.updateJump(time, body, grounded, surface);
     this.updateSprings(body, grounded);
     this.updatePortals(time);
     this.updateEnemies(time, dt);
@@ -566,8 +568,6 @@ export class MarblePlatform extends Phaser.Scene {
     this.checkGoalAndDeath();
 
     this.prevSpace = this.cursors.space.isDown;
-    this.prevLeft  = this.cursors.left.isDown  || this.keys.A.isDown;
-    this.prevRight = this.cursors.right.isDown || this.keys.D.isDown;
   }
 
   // ── Parallax ──────────────────────────────────────────────────────────────
@@ -637,12 +637,12 @@ export class MarblePlatform extends Phaser.Scene {
   ): void {
     const goLeft  = this.cursors.left.isDown  || this.keys.A.isDown;
     const goRight = this.cursors.right.isDown || this.keys.D.isDown;
-    const justLeft  = goLeft  && !this.prevLeft;
-    const justRight = goRight && !this.prevRight;
 
-    const KICK = 120;
-    if (grounded && justLeft  && body.velocity.x >= 0) body.setVelocityX(-KICK);
-    if (grounded && justRight && body.velocity.x <= 0) body.setVelocityX( KICK);
+    // Startup kick: fires whenever grounded, key held, and speed is near-zero.
+    // Ensures responsive restart from rest even when key was held while decelerating.
+    const KICK = 150;
+    if (grounded && goLeft  && Math.abs(body.velocity.x) < 30) body.setVelocityX(-KICK);
+    if (grounded && goRight && Math.abs(body.velocity.x) < 30) body.setVelocityX( KICK);
 
     const props = SURFACE_PROPS[surface];
     const accel = this.ACCEL_X * (grounded ? 1.0 : 0.12) * props.accelMultiplier;
@@ -654,7 +654,7 @@ export class MarblePlatform extends Phaser.Scene {
     } else {
       body.setAccelerationX(0);
       if (grounded && Math.abs(body.velocity.x) > 1) {
-        const drag = Math.pow(this.ROLL_DRAG * props.dragMultiplier, delta / 16.67);
+        const drag = Math.pow(props.drag, delta / 16.67);
         body.setVelocityX(body.velocity.x * drag);
       } else if (grounded) {
         body.setVelocityX(0);
@@ -663,13 +663,14 @@ export class MarblePlatform extends Phaser.Scene {
   }
 
   // ── Jump ─────────────────────────────────────────────────────────────────
-  private updateJump(time: number, body: Phaser.Physics.Arcade.Body, grounded: boolean): void {
+  private updateJump(time: number, body: Phaser.Physics.Arcade.Body, grounded: boolean, surface: SurfaceType): void {
     const space         = this.cursors.space;
     const spaceJustDown = space.isDown && !this.prevSpace;
 
     if (spaceJustDown && grounded && !this.charging) {
-      this.charging = true;
-      this.chargeT0 = time;
+      this.charging           = true;
+      this.chargeT0           = time;
+      this.chargeStartSurface = surface;  // capture surface at jump start
     }
 
     if (this.charging) {
@@ -683,8 +684,11 @@ export class MarblePlatform extends Phaser.Scene {
         this.marble.setScale(1 + t * 0.28 + jX, 1 - t * 0.22 + jY);
       }
 
-      if (!space.isDown || t >= 1) {
-        const jumpV = Phaser.Math.Linear(this.JUMP_MIN, this.JUMP_MAX, t);
+      // Release only when player lets go — no auto-release at max charge.
+      // At full charge the glow pulses red to signal "release now".
+      if (!space.isDown) {
+        const surfaceProps = SURFACE_PROPS[this.chargeStartSurface];
+        const jumpV = Phaser.Math.Linear(this.JUMP_MIN, this.JUMP_MAX, t) * surfaceProps.jumpMultiplier;
         body.setVelocityY(-jumpV);
         this.charging = false;
         this.tweens.add({
