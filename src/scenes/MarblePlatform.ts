@@ -420,12 +420,6 @@ export class MarblePlatform extends Phaser.Scene {
       }
     }
 
-    // Reset charging if somehow we left the ground mid-charge
-    if (this.charging && !grounded && (time - this.chargeT0) > 100) {
-      this.charging = false;
-      this.marble.setScale(1);
-    }
-
     // ── Spring pads ──────────────────────────────────────────────────────
     if (!this.charging && grounded) {
       for (const sp of this.springs) {
