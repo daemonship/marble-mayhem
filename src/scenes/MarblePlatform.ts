@@ -171,6 +171,15 @@ export class MarblePlatform extends Phaser.Scene {
   private chargeGfx!: Phaser.GameObjects.Graphics;
   private glowGfx!:   Phaser.GameObjects.Graphics;
 
+  // ── Foot drag brake ────────────────────────────────────────────────────────
+  private braking    = false;
+  private shiftKey!: Phaser.Input.Keyboard.Key;
+  private footGfx!:  Phaser.GameObjects.Graphics;
+
+  // ── Jump legs ──────────────────────────────────────────────────────────────
+  private legsGfx!:  Phaser.GameObjects.Graphics;
+  private legLaunchT = 0;  // 1.0 at fire, counts down to 0 over ~200ms
+
   // ── Parallax layers ────────────────────────────────────────────────────────
   private pxLayers: Array<{ ts: Phaser.GameObjects.TileSprite; factor: number }> = [];
 
@@ -616,7 +625,9 @@ export class MarblePlatform extends Phaser.Scene {
     this.timerText = this.add.text(790, 10, '', s).setScrollFactor(0).setDepth(50).setOrigin(1, 0);
     this.chargeGfx = this.add.graphics().setScrollFactor(0).setDepth(50);
     this.glowGfx   = this.add.graphics().setDepth(9);
-    this.add.text(400, 593, 'A/← roll   D/→ roll   SPACE hold+release = jump', {
+    this.footGfx   = this.add.graphics().setDepth(8);
+    this.legsGfx   = this.add.graphics().setDepth(9);
+    this.add.text(400, 593, 'A/D  roll     SPACE  charge+jump     SHIFT  brake', {
       fontSize: '11px', fontFamily: 'monospace', color: '#4b5563', align: 'center',
     }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(50);
   }
@@ -631,6 +642,7 @@ export class MarblePlatform extends Phaser.Scene {
       D: Phaser.Input.Keyboard.KeyCodes.D,
     }) as { A: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
     this.input.keyboard!.addCapture(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.shiftKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -639,6 +651,7 @@ export class MarblePlatform extends Phaser.Scene {
   update(time: number, delta: number): void {
     const body = this.marble.body as Phaser.Physics.Arcade.Body;
     const dt   = delta / 1000;
+    this.braking = this.shiftKey.isDown;
 
     // ── Grounded detection ─────────────────────────────────────────────────
     // body.blocked.down is unreliable for circular bodies — supplement with
@@ -663,6 +676,7 @@ export class MarblePlatform extends Phaser.Scene {
     const surface = contact.onSeesaw ? SurfaceType.CONCRETE : this.getSurface(grounded);
     this.updateSurface(body, grounded, surface, dt);
     this.updateMovement(body, grounded, surface, dt);
+    this.updateBrake(body, grounded, surface, dt);
 
     // Apply gravity component along seesaw slope (marble slides toward lower arm)
     if (contact.onSeesaw) {
@@ -694,6 +708,7 @@ export class MarblePlatform extends Phaser.Scene {
     }
 
     this.updateSpeedPads();
+    if (this.legLaunchT > 0) this.legLaunchT = Math.max(0, this.legLaunchT - dt * 5);
     this.updateVisuals(time, body, dt, grounded);
     this.updateHUD(time, body, grounded, surface);
     this.checkGoalAndDeath();
@@ -873,6 +888,7 @@ export class MarblePlatform extends Phaser.Scene {
   }
 
   private fireJump(body: Phaser.Physics.Arcade.Body, t: number): void {
+    this.legLaunchT = 1.0;
     const props = SURFACE_PROPS[this.chargeStartSurface];
     const jumpV = Phaser.Math.Linear(this.JUMP_MIN, this.JUMP_MAX, t) * props.jumpMultiplier;
     body.setVelocityY(-jumpV);
@@ -1145,6 +1161,9 @@ export class MarblePlatform extends Phaser.Scene {
       this.chargeGfx.lineStyle(1, 0x4b5563); this.chargeGfx.strokeRect(bx - 1, by - 1, bw + 2, 14);
     }
 
+    // Legs visual (charge coil + launch spring)
+    this.drawLegs(this.marble.x, this.marble.y, visualT, body);
+
     // Portal visuals
     this.drawPortals(time);
   }
@@ -1213,6 +1232,158 @@ export class MarblePlatform extends Phaser.Scene {
       targets: this.marble, alpha: 0.2, duration: 90,
       yoyo: true, repeat: 3, onComplete: () => this.marble.setAlpha(1),
     });
+  }
+
+  // ── Foot drag brake ─────────────────────────────────────────────────────────
+  // Trailing foot that drags against the surface — terrain-aware deceleration.
+  private updateBrake(
+    body:     Phaser.Physics.Arcade.Body,
+    grounded: boolean,
+    surface:  SurfaceType,
+    dt:       number,
+  ): void {
+    this.footGfx.clear();
+    const vx    = body.velocity.x;
+    const speed = Math.abs(vx);
+    if (!this.braking || !grounded || speed < 8) return;
+
+    // Blend normal surface drag toward aggressive brake drag, weighted by grip
+    const effectiveness: Record<SurfaceType, number> = {
+      [SurfaceType.ICE]:       0.00,  // foot skates — no help
+      [SurfaceType.WET_METAL]: 0.15,  // slick — almost nothing
+      [SurfaceType.SNOW]:      0.50,
+      [SurfaceType.BOUNCE_PAD]:0.60,
+      [SurfaceType.CONVEYOR]:  0.75,
+      [SurfaceType.GRASS]:     0.90,
+      [SurfaceType.CONCRETE]:  1.00,
+      [SurfaceType.SAND]:      1.35,  // foot digs in — very effective
+      [SurfaceType.MUD]:       1.60,  // deep drag — maximum
+    };
+    const eff       = effectiveness[surface] ?? 1.0;
+    const normDrag  = SURFACE_PROPS[surface].drag;
+    const brakeDrag = normDrag - (normDrag - 0.78) * eff;
+    body.setVelocityX(vx * Math.pow(brakeDrag, dt / 0.01667));
+
+    // ── Trailing foot visual ────────────────────────────────────────────────
+    const mx  = this.marble.x;
+    const my  = this.marble.y;
+    const dir = vx > 0 ? 1 : -1;          // travel direction; foot trails opposite
+
+    // Foot extends further behind at higher speed
+    const extension = Math.min(speed * 0.08, this.R * 2.4);
+
+    // Surface dig depth (visual compression into ground)
+    const digDepth: Record<SurfaceType, number> = {
+      [SurfaceType.MUD]:       9,
+      [SurfaceType.SAND]:      6,
+      [SurfaceType.SNOW]:      4,
+      [SurfaceType.CONCRETE]:  2,
+      [SurfaceType.GRASS]:     2,
+      [SurfaceType.BOUNCE_PAD]:1,
+      [SurfaceType.CONVEYOR]:  1,
+      [SurfaceType.WET_METAL]: 1,
+      [SurfaceType.ICE]:       0,
+    };
+    const dig = digDepth[surface] ?? 2;
+
+    // Ankle origin: back-lower quadrant of marble
+    const ox = mx - dir * this.R * 0.55;
+    const oy = my + this.R * 0.65;
+
+    // Foot contact point: behind marble at surface + dig
+    const fx = mx - dir * (this.R * 0.9 + extension);
+    const fy = my + this.R + dig;
+
+    // Shin line (skin tone)
+    this.footGfx.lineStyle(4, 0xf4c98a, 0.95);
+    this.footGfx.lineBetween(ox, oy, fx, fy - 3);
+
+    // Shoe (elongated, toe pointing backward away from marble)
+    const shoeW = 15 + extension * 0.12;
+    const toeX  = fx - dir * shoeW * 0.58;
+    const heelX = fx + dir * shoeW * 0.42;   // eslint-disable-line @typescript-eslint/no-unused-vars
+    this.footGfx.fillStyle(0x2c2c4a, 1.0);
+    this.footGfx.fillRoundedRect(Math.min(toeX, fx + dir * shoeW * 0.42), fy - 4, shoeW, 7, 3);
+    // Sneaker accent stripe
+    this.footGfx.fillStyle(0x5ba4e8, 0.85);
+    this.footGfx.fillRect(Math.min(toeX, fx + dir * shoeW * 0.42) + 2, fy - 3, shoeW - 4, 2);
+
+    // Dust / dirt particles at contact (surface-specific colours)
+    if (dig > 1 && speed > 50) {
+      const dustColors: Partial<Record<SurfaceType, number>> = {
+        [SurfaceType.MUD]:  0x7c4a1a,
+        [SurfaceType.SAND]: 0xd4a96a,
+        [SurfaceType.SNOW]: 0xdce8ff,
+      };
+      this.footGfx.fillStyle(dustColors[surface] ?? 0x9ca3af, 0.45);
+      for (let i = 0; i < 4; i++) {
+        this.footGfx.fillCircle(fx - dir * i * 5, fy - 2 - i * 2, 1.5 + speed / 250);
+      }
+    }
+  }
+
+  // ── Jump legs ─────────────────────────────────────────────────────────────
+  // Two cartoon legs emerge from the squish during charge, spring at launch.
+  private drawLegs(
+    mx:      number,
+    my:      number,
+    visualT: number | null,
+    body:    Phaser.Physics.Arcade.Body,
+  ): void {
+    this.legsGfx.clear();
+    const launchT = this.legLaunchT;
+    if (visualT === null && launchT === 0) return;
+
+    // Legs angle backward from direction of travel (physically correct lean)
+    const velTilt = (body.velocity.x / this.MAX_VX) * 0.22;
+    const legSep  = this.R * 0.52;
+    const SKIN    = 0xf4c98a;
+    const SHOE    = 0x2c2c4a;
+    const STRIPE  = 0x5ba4e8;
+
+    if (launchT > 0) {
+      // Launch spring: legs shoot straight out then fade in ~200ms
+      const ext = this.R * 2.1 * launchT;
+      for (const side of [-1, 1]) {
+        const ox = mx + side * legSep;
+        const oy = my + this.R;
+        const fx = ox - velTilt * ext;
+        const fy = oy + ext;
+        this.legsGfx.lineStyle(5, SKIN, launchT);
+        this.legsGfx.lineBetween(ox, oy, fx, fy);
+        this.legsGfx.fillStyle(SHOE, launchT);
+        this.legsGfx.fillRoundedRect(fx - 8, fy - 4, 16, 7, 3);
+        this.legsGfx.fillStyle(STRIPE, launchT * 0.9);
+        this.legsGfx.fillRect(fx - 6, fy - 3, 12, 2);
+      }
+      return;
+    }
+
+    // Charge coil: bent legs, deepening with t (emerge from squish)
+    const t     = visualT!;
+    const depth = this.R * 1.35 * (0.18 + 0.82 * t);
+
+    for (const side of [-1, 1]) {
+      const ox = mx + side * legSep;
+      const oy = my + this.R;
+
+      // Knee splays outward as charge builds (coiling spring)
+      const kneeX = ox + side * this.R * 0.44 * t;
+      const kneeY = oy + depth * 0.45;
+
+      // Foot: velocity-tilted so legs lean backward when moving
+      const footX = ox - velTilt * depth * 1.2;
+      const footY = oy + depth;
+
+      this.legsGfx.lineStyle(5, SKIN, 0.93);
+      this.legsGfx.lineBetween(ox, oy, kneeX, kneeY);   // thigh
+      this.legsGfx.lineBetween(kneeX, kneeY, footX, footY); // calf
+
+      this.legsGfx.fillStyle(SHOE, 0.95);
+      this.legsGfx.fillRoundedRect(footX - 8, footY - 4, 16, 7, 3);
+      this.legsGfx.fillStyle(STRIPE, 0.85);
+      this.legsGfx.fillRect(footX - 6, footY - 3, 12, 2);
+    }
   }
 
   // ── Gem scatter (Sonic ring-loss) ─────────────────────────────────────────
