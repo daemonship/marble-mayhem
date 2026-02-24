@@ -1836,3 +1836,13 @@ Context at 194k / 200k tokens. Handoff running automatically — session will re
 
 === Auto-restart triggered. New session starting... ===
 👋
+
+[2026-02-24T00:18] > Stop hook feedback:
+[python3 ~/.claude/hooks/stop_dispatcher.py]: 
+<context-critical>
+Context at 194k / 200k tokens. Handoff running automatically — session will restart.
+</context-critical>
+
+
+=== Auto-restart triggered. New session starting... ===
+[Bash: cat ~/.claude/settings.json | python3 -c "import json,sys...]

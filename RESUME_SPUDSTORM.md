@@ -1,54 +1,52 @@
 # RESUME — SPUDSTORM
 
 **Date:** 2026-02-23
-**Status:** Debug overlay removed from Game.ts — needs commit + push
+**Status:** Mouse-aiming fix committed. Handoff docs need commit + push.
 
 ---
 
-## Done This Session
-- Fixed canvas/input bug in commit `0603563` (CSS transform removed, `CENTER_BOTH`, `mouseActive=true` on start)
-- Added debug overlay to diagnose mouse coords (yellow text at bottom of canvas)
-- Removed the `// DEBUG` update block from `update()` in `src/scenes/Game.ts` (not yet committed)
-- `debugText` property and `create()` init were already removed in a prior pass
+## Current State
+
+Spudstorm is a browser-based top-down shooter deployed at https://spudstorm.pages.dev via Cloudflare Pages.
+
+### Recent Work (last 2 sessions)
+- Fixed mouse aiming: switched from Phaser pointer to DOM-tracked mouse coordinates (`f940ce7`)
+- Fixed canvas layout (flexbox not CSS transform), mouseActive init to true
+- Added title screen, in-game tutorial overlay, fixed attract mode bugs
+- Removed debug overlay
+
+### Uncommitted Changes
+- `CONTEXT_SPUDSTORM.md` — updated this session
+- `RESUME_SPUDSTORM.md` — updated this session
+- `memory/working_memory.md` — updated this session
+
+---
 
 ## IMMEDIATE NEXT TASK
 
-Commit the debug removal and push:
+**Commit handoff docs and verify deployment:**
 
 ```bash
 cd /home/shazbot/Projects/products/games/spudstorm
-git add src/scenes/Game.ts
-git commit -m "fix: remove debug overlay from game scene"
+git add CONTEXT_SPUDSTORM.md RESUME_SPUDSTORM.md memory/working_memory.md
+git commit -m "chore: update handoff docs"
 git push
 ```
 
-Then verify at https://spudstorm.pages.dev: player follows mouse after clicking Start, no debug text visible.
+Then verify https://spudstorm.pages.dev: click Start, move mouse, confirm player aims at cursor immediately without wiggle or lag. If broken, check Cloudflare Pages build log.
 
-## Remaining Bugs (from PR review — silent-failure-hunter)
-
-1. **Race condition** — `main.ts:311-312` attract mode flag resets before `scene.stop()`; move resets inside `setTimeout` callback
-2. **Tween lifecycle** — `Game.ts:showTutorialOverlay()` delayedCall can fire on torn-down scene if player dies in <3.8s; add `this.events.once(Phaser.Scenes.Events.SHUTDOWN, ...)` to cancel timer and destroy text
-3. **Null guard missing** — `main.ts:315` no guard on `window.game?.scene` before accessing in start button handler
-4. **Silent audio errors** — AudioSystem catch blocks swallow all errors; add `console.warn` logging
-
-## IMMEDIATE NEXT TASK
-
-First commit pending debug removal, then fix the 4 silent-failure issues above:
-
-```bash
-cd /home/shazbot/Projects/products/games/spudstorm
-git add src/scenes/Game.ts
-git commit -m "fix: remove debug overlay from game scene"
-git push
-```
-
-Then address items 1-4 above and commit: `fix: address silent-failure-hunter findings — tween lifecycle, race condition, error logging`
-
-Verify at https://spudstorm.pages.dev after push.
+---
 
 ## Key Files
 
-- `src/scenes/Game.ts` — main game scene, `showTutorialOverlay()`, `updatePlayerMovement()` ~line 235
-- `src/main.ts` — Phaser config, DOM overlays, AudioSystem, start button handler ~line 311
+- `src/scenes/Game.ts` — Main game (player, shooting, mouse aim)
+- `src/scenes/TitleScene.ts` — Title/attract mode
+- `src/scenes/GameOver.ts` — Game over screen
+- `vite.config.ts` — Build config
+- `.github/workflows/` — CI/CD to Cloudflare Pages
 
-See CONTEXT_SPUDSTORM.md for full session details.
+---
+
+## Full Context
+
+See `CONTEXT_SPUDSTORM.md` in project root for full session transcript summary.
