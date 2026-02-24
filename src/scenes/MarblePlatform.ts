@@ -119,8 +119,9 @@ export class MarblePlatform extends Phaser.Scene {
   private respawnX = 0;
   private respawnY = 0;
 
-  // Portal cooldown — prevents immediate re-entry after teleport
-  private portalCooldownUntil = 0;
+  // Portal exit lock — destination portal is inactive until marble moves far enough away.
+  // Distance-based (not time-based) so slow-moving marbles can't bounce forever.
+  private portalExitPos: { x: number; y: number } | null = null;
 
   // Knockback invincibility — brief grace period after enemy hit
   private invincibleUntil = 0;
@@ -610,7 +611,7 @@ export class MarblePlatform extends Phaser.Scene {
 
     this.updateJump(time, body, grounded, surface);
     this.updateSprings(body, grounded);
-    this.updatePortals(time);
+    this.updatePortals();
     this.updateEnemies(time, dt);
     this.updateCollectibles();
 
@@ -827,12 +828,21 @@ export class MarblePlatform extends Phaser.Scene {
   }
 
   // ── Portals ───────────────────────────────────────────────────────────────
-  private readonly PORTAL_RADIUS = 36;
+  private readonly PORTAL_RADIUS    = 36;
+  // Marble must move this far from the exit portal before it can teleport again.
+  // Must exceed PORTAL_RADIUS so the marble fully clears the destination ring.
+  private readonly PORTAL_EXIT_DIST = 80;
 
-  private updatePortals(time: number): void {
-    if (time < this.portalCooldownUntil) return;
-
+  private updatePortals(): void {
     const mx = this.marble.x, my = this.marble.y;
+
+    // Unlock destination portal once marble has walked far enough away
+    if (this.portalExitPos) {
+      const d = Phaser.Math.Distance.Between(mx, my, this.portalExitPos.x, this.portalExitPos.y);
+      if (d < this.PORTAL_EXIT_DIST) return;   // still too close — no portals active
+      this.portalExitPos = null;
+    }
+
     const body = this.marble.body as Phaser.Physics.Arcade.Body;
 
     for (const portal of this.portals) {
@@ -840,19 +850,17 @@ export class MarblePlatform extends Phaser.Scene {
       const distB = Phaser.Math.Distance.Between(mx, my, portal.bx, portal.by);
 
       if (distA < this.PORTAL_RADIUS) {
-        // Teleport A → B, preserving velocity
         const vx = body.velocity.x, vy = body.velocity.y;
         body.reset(portal.bx, portal.by);
         body.setVelocity(vx, vy);
-        this.portalCooldownUntil = time + 500;
+        this.portalExitPos = { x: portal.bx, y: portal.by };
         this.showPortalFlash(portal.bx, portal.by, portal.color);
         break;
       } else if (distB < this.PORTAL_RADIUS) {
-        // Teleport B → A, preserving velocity
         const vx = body.velocity.x, vy = body.velocity.y;
         body.reset(portal.ax, portal.ay);
         body.setVelocity(vx, vy);
-        this.portalCooldownUntil = time + 500;
+        this.portalExitPos = { x: portal.ax, y: portal.ay };
         this.showPortalFlash(portal.ax, portal.ay, portal.color);
         break;
       }
