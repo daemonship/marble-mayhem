@@ -338,6 +338,8 @@ export class MarblePlatform extends Phaser.Scene {
       A: Phaser.Input.Keyboard.KeyCodes.A,
       D: Phaser.Input.Keyboard.KeyCodes.D,
     }) as { A: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
+    // Phaser only captures arrow keys by default — SPACE scrolls the page otherwise
+    this.input.keyboard!.addCapture(Phaser.Input.Keyboard.KeyCodes.SPACE);
   }
 
   // ── Main loop ─────────────────────────────────────────────────────────────
