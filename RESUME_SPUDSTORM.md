@@ -1,52 +1,66 @@
 # RESUME — SPUDSTORM
+Date: 2026-02-23
+Status: Active — mouse input fixes deployed, awaiting user verification
 
-**Date:** 2026-02-24
-**Status:** Mouse input fixed via DOM tracking. Game deployed at https://spudstorm.pages.dev. Needs user play-test confirmation.
+## Current State
 
----
+Canvas layout and mouse input have been overhauled. Root cause was identified: CSS
+transform: translate(-50%, -50%) broke Phaser pointer coordinates. Fixes applied:
+- Removed CSS transform, flexbox centering used instead
+- mouseActive set true immediately in create()
+- DOM mousemove event tracks coordinates (not Phaser pointer)
 
-## What Was Done This Session
-1. Multi-agent PR review on attract mode + title screen commit
-2. Fixed attract mode flag reset race condition (flags moved inside setTimeout)
-3. Fixed tutorial tween lifecycle (SHUTDOWN guard added)
-4. Fixed Play Again path — was missing attract mode flag resets
-5. Diagnosed and fixed canvas layout / mouse input root cause: CSS transform broke Phaser pointer coords
-6. Switched to DOM-tracked mouse coordinates (window.mousemove) — bypasses Phaser input entirely
-7. Set mouseActive = true immediately (no longer gated on first pointermove)
-8. Multiple commits pushed, Cloudflare Pages auto-deployed
+All fixes committed and pushed to main. Cloudflare Pages auto-deploy triggered.
 
----
+**Live URL:** https://spudstorm.pages.dev
+
+**Recent commits:**
+- `9fe5b6a` chore: update handoff docs and archive
+- `f940ce7` fix: use DOM-tracked mouse coords instead of Phaser pointer
+- `0603563` fix: correct canvas layout, input system, and mouse tracking
+- `f392d53` fix: address PR review findings — race condition, tween lifecycle, play-again path
+- `d592da5` fix: add instructions, title screen, and fix attract mode bugs
+
+**Bugs fixed (all done):**
+- CSS transform breaking Phaser pointer coordinate mapping — removed transform
+- mouseActive gated on first pointermove (could stick false) — now true in create()
+- DOM mouse tracking now used instead of Phaser pointer
+- Attract mode flag reset race condition (flags set inside setTimeout after scene.stop)
+- Tutorial tween lifecycle (SHUTDOWN guard added)
+- Play Again path missing attract mode resets
+- Debug overlay removed from production build
+
+**UX improvements (all done):**
+- Start screen with title, subtitle, full How to Play panel
+- In-game tutorial overlay (3 lines, fades after ~4s)
+
+**Git state:** CONTEXT_SPUDSTORM.md, RESUME_SPUDSTORM.md, memory/working_memory.md
+are all modified (M) — need commit + push.
 
 ## IMMEDIATE NEXT TASK
 
-**Play-test the game at https://spudstorm.pages.dev and confirm mouse input works.**
+1. **Verify the game works** — open https://spudstorm.pages.dev, click Start, move mouse.
+   Does the yellow player square follow the mouse? Do enemies spawn and approach?
+   If yes: game is working, move on to new features.
+   If no: read src/scenes/Game.ts updatePlayerMovement() and check DOM mouse handler setup.
 
-1. Open https://spudstorm.pages.dev in browser
-2. Click Start
-3. Move mouse — player should follow immediately with no wiggle or offset
-4. Verify enemies spawn, shooting works, game is playable end-to-end
-5. Verify Play Again works after game over (no attract mode re-activation)
+2. **Commit handoff docs and push:**
+```bash
+git add CONTEXT_SPUDSTORM.md RESUME_SPUDSTORM.md memory/working_memory.md
+git commit -m "chore: update handoff docs"
+git push origin main
+```
 
-If mouse still broken, check src/scenes/Game.ts — look for mouseX/mouseY and the window.mousemove handler in create().
-
-After confirming playable: commit remaining uncommitted files (CONTEXT, RESUME, working_memory, handoff_archive/) and close out this task.
-
----
+3. **If mouse still broken**, check:
+   - `git diff HEAD src/scenes/Game.ts` — confirm DOM mouse listener is present
+   - Look for `window.addEventListener('mousemove'` in Game.ts create()
+   - Look for `this.mouseX` / `this.mouseY` usage in updatePlayerMovement()
 
 ## Key Files
-- `src/scenes/Game.ts` — DOM mouse tracking, player movement, tutorial overlay
-- `src/main.ts` — title screen, attract mode resets, canvas/Phaser config
-- `index.html` — flexbox container (no CSS transform on canvas)
-- `src/systems/AttractMode.ts` — attract mode (fixed: delta units, flag resets)
+- src/scenes/Game.ts — main game scene, mouse tracking, tutorial overlay
+- src/main.ts — start screen, attractModeActive reset, canvas config
+- index.html — #game-container flexbox layout
+- src/systems/AttractMode.ts — bot controller for idle demo
 
----
-
-## Git State
-Last commit: 3856c32 chore: update handoff docs
-Uncommitted: CONTEXT_SPUDSTORM.md, RESUME_SPUDSTORM.md, memory/working_memory.md
-Untracked: docs/history/handoff_archive/ (two archived files)
-
----
-
-## Context File
-See CONTEXT_SPUDSTORM.md for full session details.
+## Context
+See CONTEXT_SPUDSTORM.md for full session summary.
