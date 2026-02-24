@@ -25,6 +25,7 @@ export class Game extends Phaser.Scene {
   private mouseX: number = 400;
   private mouseY: number = 300;
   private mouseMoveHandler?: (e: MouseEvent) => void;
+  private debugText!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: 'Game' });
@@ -59,19 +60,28 @@ export class Game extends Phaser.Scene {
     this.pointer = this.input.activePointer;
     this.input.on('pointermove', () => { this.mouseActive = true; });
 
-    // Bypass Phaser input for mouse tracking — use native canvas events for accuracy
+    // Bypass Phaser input for mouse tracking — listen on window so events fire
+    // even when the canvas doesn't fill the whole screen (e.g. large monitor)
     this.mouseMoveHandler = (e: MouseEvent) => {
       const r = this.game.canvas.getBoundingClientRect();
       this.mouseX = (e.clientX - r.left) * (800 / r.width);
       this.mouseY = (e.clientY - r.top) * (600 / r.height);
       this.mouseActive = true;
     };
-    this.game.canvas.addEventListener('mousemove', this.mouseMoveHandler);
+    window.addEventListener('mousemove', this.mouseMoveHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this.mouseMoveHandler) {
-        this.game.canvas.removeEventListener('mousemove', this.mouseMoveHandler);
+        window.removeEventListener('mousemove', this.mouseMoveHandler);
       }
     });
+
+    // Debug overlay — shows canvas position and mouse coords for diagnosing input issues
+    this.debugText = this.add.text(400, 592, '', {
+      fontSize: '11px',
+      color: '#ffff00',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(0.5, 1).setDepth(200);
 
     // Create groups
     this.enemies = this.physics.add.group();
@@ -184,6 +194,16 @@ export class Game extends Phaser.Scene {
   update(time: number, delta: number): void {
     // Skip all updates if paused
     if (this.isPaused) return;
+
+    // Debug overlay
+    if (this.debugText?.active) {
+      const r = this.game.canvas.getBoundingClientRect();
+      this.debugText.setText(
+        `canvas@${Math.round(r.left)},${Math.round(r.top)} ` +
+        `ptr:${Math.round(this.mouseX)},${Math.round(this.mouseY)} ` +
+        `player:${Math.round(this.player.x)},${Math.round(this.player.y)}`
+      );
+    }
 
     // Check if attract mode should end
     if (this.attractMode.isActive() && this.attractMode.shouldEnd()) {

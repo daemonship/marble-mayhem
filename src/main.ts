@@ -394,9 +394,7 @@ const config: Phaser.Types.Core.GameConfig = {
   height: 600,
   backgroundColor: '#222222',
   parent: document.getElementById('game-container') ?? undefined,
-  scale: {
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-  },
+  // Canvas centering handled via CSS in index.html
   physics: {
     default: 'arcade',
     arcade: {
