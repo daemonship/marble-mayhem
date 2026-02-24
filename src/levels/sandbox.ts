@@ -13,7 +13,7 @@
 //   Zone 5 (x 7900–9350)  : Enemies — Roller patrol + Chaser
 //   Zone 6 (x 9500–10600) : Gems + Checkpoints + Goal
 
-import { LevelDef, SurfaceType, SeesawDef } from '../types/LevelDef';
+import { LevelDef, SurfaceType, SeesawDef, SpeedPadDef } from '../types/LevelDef';
 
 const G  = 528;   // GROUND_Y — top surface of main ground
 
@@ -173,6 +173,7 @@ export const sandbox: LevelDef = {
 
     // Zone 2
     { x: 3850, y: 466, text: '▌ CONVEYORS' },
+    { x: 4460, y: 488, text: '>> SPEED PAD' },
     { x: 3850, y: 508, text: '← belt' },
     { x: 4150, y: 508, text: 'belt →' },
 
@@ -199,6 +200,16 @@ export const sandbox: LevelDef = {
     { x: 9440, y: 500, text: '1' },
     { x: 9715, y: 372, text: '2' },
     { x: 10155, y: 252, text: '3' },
+  ],
+
+  // ── Speed pads ────────────────────────────────────────────────────────────
+  // Zone 2 exit: right after the conveyor exit buffer, launch marble over the gap
+  // Zone 3 entry: horizontal boost onto bounce pad chain
+  speedPads: [
+    // Exit of Zone 2 — rightward blast to clear the 180px gap into Zone 3
+    { x: 4460, y: G, vx: 520, vy: -200 } as SpeedPadDef,
+    // Mid Zone 5 — boost helps kill the Roller at speed
+    { x: 8200, y: G, vx: 480, vy: 0 } as SpeedPadDef,
   ],
 
   // ── Seesaws ───────────────────────────────────────────────────────────────

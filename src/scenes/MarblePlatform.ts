@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LevelDef, SurfaceType, PlatformDef } from '../types/LevelDef';
+import { LevelDef, SurfaceType, PlatformDef, SpeedPadDef } from '../types/LevelDef';
 import { sandbox } from '../levels/sandbox';
 import { SeesawSystem, SeesawContact } from '../systems/SeesawSystem';
 
@@ -82,6 +82,21 @@ interface RuntimePortal {
   color: number;
 }
 
+interface ScatteredGem {
+  img:       Phaser.GameObjects.Image;
+  x:         number;
+  y:         number;
+  vx:        number;
+  vy:        number;
+  spawnTime: number;
+}
+
+interface RuntimeSpeedPad {
+  def:     SpeedPadDef;
+  img:     Phaser.GameObjects.Image;
+  exitPos: { x: number; y: number } | null;
+}
+
 // ── Scene ─────────────────────────────────────────────────────────────────────
 export class MarblePlatform extends Phaser.Scene {
   private marble!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
@@ -162,6 +177,20 @@ export class MarblePlatform extends Phaser.Scene {
   // ── Seesaw system ──────────────────────────────────────────────────────────
   private seesawSystem!: SeesawSystem;
 
+  // ── Gem counter + scattered gems (Sonic-style loss on hit) ─────────────────
+  private gemCount      = 0;
+  private scatteredGems: ScatteredGem[] = [];
+
+  // ── Speed pads ─────────────────────────────────────────────────────────────
+  private speedPads: RuntimeSpeedPad[] = [];
+  private readonly SPEED_PAD_RADIUS    = 28;
+  private readonly SPEED_PAD_EXIT_DIST = 64;
+
+  // ── Time trial ─────────────────────────────────────────────────────────────
+  private trialStartMs = -1;
+  private bestTime     = 0;
+  private timerText!:  Phaser.GameObjects.Text;
+
   // True whenever any part of the charge state is active (blocks springs, rotation, etc.)
   private get isChargeActive(): boolean {
     return this.charging || this.chargeLocked || this.chargeArmedUntil > 0;
@@ -176,6 +205,8 @@ export class MarblePlatform extends Phaser.Scene {
     this.levelDef  = sandbox;
     this.respawnX  = this.levelDef.spawnX;
     this.respawnY  = this.levelDef.spawnY;
+    const stored   = localStorage.getItem(`best_${this.levelDef.id}`);
+    this.bestTime  = stored ? parseInt(stored, 10) : 0;
 
     this.physics.world.setBounds(0, -400, this.levelDef.worldW, 1100);
     this.cameras.main.setBounds(0, -400, this.levelDef.worldW, 1100);
@@ -270,6 +301,7 @@ export class MarblePlatform extends Phaser.Scene {
     this.makeSpringTex();
     this.makeGemTex();
     this.makeCheckpointTex();
+    this.makeSpeedPadTex();
     this.makeEnemyTex('roller');
     this.makeEnemyTex('chaser');
     // Platform texture per surface type
@@ -409,6 +441,25 @@ export class MarblePlatform extends Phaser.Scene {
     }
   }
 
+  private makeSpeedPadTex(): void {
+    if (this.textures.exists('speedPadTex')) return;
+    const W = 48, H = 18;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d')!;
+    // Dark base + amber top stripe
+    ctx.fillStyle = '#1a1200'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fbbf24'; ctx.fillRect(0, 0, W, 3);
+    // Double-chevron >> (speed boost symbol)
+    ctx.fillStyle = 'rgba(251,191,36,0.9)';
+    for (let ox = 6; ox <= 24; ox += 14) {
+      ctx.beginPath();
+      ctx.moveTo(ox, 5); ctx.lineTo(ox + 8, 9); ctx.lineTo(ox, 13);
+      ctx.lineTo(ox + 2, 13); ctx.lineTo(ox + 10, 9); ctx.lineTo(ox + 2, 5);
+      ctx.closePath(); ctx.fill();
+    }
+    this.textures.addCanvas('speedPadTex', c);
+  }
+
   private makeEnemyTex(type: 'roller' | 'chaser'): void {
     const key = `enemyTex_${type}`;
     if (this.textures.exists(key)) return;
@@ -524,6 +575,12 @@ export class MarblePlatform extends Phaser.Scene {
     // Seesaws
     this.seesawSystem.build(def.seesaws ?? []);
 
+    // Speed pads
+    for (const sp of def.speedPads ?? []) {
+      const img = this.add.image(sp.x, sp.y, 'speedPadTex').setDepth(5).setOrigin(0.5, 1);
+      this.speedPads.push({ def: sp, img, exitPos: null });
+    }
+
     // Decorative floor
     const G = def.groundY;
     const deco = this.add.graphics().setDepth(2);
@@ -554,6 +611,7 @@ export class MarblePlatform extends Phaser.Scene {
   private buildHUD(): void {
     const s = { fontSize: '13px', fontFamily: 'monospace', color: '#e2e8f0', stroke: '#000', strokeThickness: 3 };
     this.hudText   = this.add.text(10, 10, '', s).setScrollFactor(0).setDepth(50);
+    this.timerText = this.add.text(790, 10, '', s).setScrollFactor(0).setDepth(50).setOrigin(1, 0);
     this.chargeGfx = this.add.graphics().setScrollFactor(0).setDepth(50);
     this.glowGfx   = this.add.graphics().setDepth(9);
     this.add.text(400, 593, 'A/← roll   D/→ roll   SPACE hold+release = jump', {
@@ -628,6 +686,12 @@ export class MarblePlatform extends Phaser.Scene {
       }
     }
 
+    // Start trial timer on first marble movement
+    if (this.trialStartMs < 0 && (Math.abs(body.velocity.x) > 5 || Math.abs(body.velocity.y) > 5)) {
+      this.trialStartMs = time;
+    }
+
+    this.updateSpeedPads();
     this.updateVisuals(time, body, dt, grounded);
     this.updateHUD(time, body, grounded, surface);
     this.checkGoalAndDeath();
@@ -951,11 +1015,12 @@ export class MarblePlatform extends Phaser.Scene {
           e.alive = false;
           this.tweens.add({ targets: e.img, scaleX: 0, scaleY: 0, alpha: 0, duration: 200 });
         } else {
-          // Knockback marble
+          // Knockback marble — scatter gems Sonic-style
           const knockDir = dx >= 0 ? 1 : -1;
           body.setVelocityX(knockDir * this.KNOCKBACK_VX);
           body.setVelocityY(-280);
           this.invincibleUntil = time + this.INVINCIBLE_MS;
+          this.scatterGems(time);
           this.tweens.add({ targets: this.marble, alpha: 0.3, duration: 80, yoyo: true, repeat: 3, onComplete: () => this.marble.setAlpha(1) });
         }
       }
@@ -964,13 +1029,44 @@ export class MarblePlatform extends Phaser.Scene {
 
   // ── Gems + Checkpoints ────────────────────────────────────────────────────
   private updateCollectibles(): void {
-    const mx = this.marble.x, my = this.marble.y;
+    const mx  = this.marble.x, my = this.marble.y;
+    const dt  = this.game.loop.delta / 1000;
+    const now = this.time.now;
 
+    // Static gems
     for (const gem of this.gems) {
       if (gem.collected) continue;
       if (Phaser.Math.Distance.Between(mx, my, gem.x, gem.y) < this.R + 14) {
         gem.collected = true;
+        this.gemCount++;
         this.tweens.add({ targets: gem.img, y: gem.y - 40, alpha: 0, duration: 400 });
+      }
+    }
+
+    // Scattered gems — manual gravity + bounce + collection
+    for (let i = this.scatteredGems.length - 1; i >= 0; i--) {
+      const sg  = this.scatteredGems[i];
+      const age = now - sg.spawnTime;
+      if (age > 5000) {
+        sg.img.destroy();
+        this.scatteredGems.splice(i, 1);
+        continue;
+      }
+      sg.vy += 700 * dt;
+      sg.x  += sg.vx * dt;
+      sg.y  += sg.vy * dt;
+      // Bounce off ground
+      if (sg.y > this.levelDef.groundY - 14) {
+        sg.y   = this.levelDef.groundY - 14;
+        sg.vy *= -0.4;
+        sg.vx *= 0.75;
+      }
+      sg.img.setPosition(sg.x, sg.y).setAlpha(Math.min(1, (5000 - age) / 800));
+      // Collect scattered gem
+      if (Phaser.Math.Distance.Between(mx, my, sg.x, sg.y) < this.R + 14) {
+        if (this.gemCount < this.gems.length) this.gemCount++;
+        sg.img.destroy();
+        this.scatteredGems.splice(i, 1);
       }
     }
 
@@ -1049,17 +1145,23 @@ export class MarblePlatform extends Phaser.Scene {
     grounded: boolean,
     surface: SurfaceType,
   ): void {
-    const spd    = Math.round(Math.abs(body.velocity.x));
-    const vspd   = Math.round(Math.abs(body.velocity.y));
-    const gems   = this.gems.filter(g => g.collected).length;
-    const total  = this.gems.length;
+    const spd       = Math.round(Math.abs(body.velocity.x));
+    const vspd      = Math.round(Math.abs(body.velocity.y));
+    const total     = this.gems.length;
     const surfLabel = surface.replace('_', ' ');
 
     this.hudText.setText(
       `hspd: ${spd}  vspd: ${vspd}  ${grounded ? '▓ ' + surfLabel : '  air'}` +
       (this.isChargeActive ? (this.chargeLocked ? '  🔒' : '  ⚡') : '') +
-      `  gems: ${gems}/${total}`,
+      `  gems: ${this.gemCount}/${total}`,
     );
+
+    // Timer — show elapsed while running, best time when idle
+    if (this.trialStartMs >= 0 && !this.goalReached) {
+      this.timerText.setText(this.fmtTime(time - this.trialStartMs));
+    } else if (this.bestTime > 0 && this.trialStartMs < 0) {
+      this.timerText.setText(`best: ${this.fmtTime(this.bestTime)}`);
+    }
   }
 
   // ── Goal + death ──────────────────────────────────────────────────────────
@@ -1077,10 +1179,15 @@ export class MarblePlatform extends Phaser.Scene {
   // HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
   private respawn(): void {
-    this.charging      = false;
-    this.chargeLocked  = false;
+    this.charging         = false;
+    this.chargeLocked     = false;
     this.chargeArmedUntil = 0;
+    this.trialStartMs     = -1;
+    this.gemCount         = 0;
     this.marble.setScale(1);
+    // Destroy any in-flight scattered gems
+    for (const sg of this.scatteredGems) sg.img.destroy();
+    this.scatteredGems = [];
     const body = this.marble.body as Phaser.Physics.Arcade.Body;
     body.reset(this.respawnX, this.respawnY);
     this.tweens.add({
@@ -1089,7 +1196,73 @@ export class MarblePlatform extends Phaser.Scene {
     });
   }
 
+  // ── Gem scatter (Sonic ring-loss) ─────────────────────────────────────────
+  private scatterGems(time: number): void {
+    const n = Math.max(this.gemCount, 5);
+    this.gemCount = 0;
+    for (let i = 0; i < n; i++) {
+      const angle = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
+      const speed = 180 + Math.random() * 240;
+      const img   = this.add.image(this.marble.x, this.marble.y, 'gemTex')
+        .setDepth(6).setScale(0.75).setOrigin(0.5);
+      this.scatteredGems.push({
+        img,
+        x: this.marble.x,
+        y: this.marble.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 160,
+        spawnTime: time,
+      });
+    }
+  }
+
+  // ── Speed pads ─────────────────────────────────────────────────────────────
+  private updateSpeedPads(): void {
+    const mx   = this.marble.x;
+    const my   = this.marble.y;
+    const body = this.marble.body as Phaser.Physics.Arcade.Body;
+
+    for (const sp of this.speedPads) {
+      // Clear exit lock once marble has moved far enough away
+      if (sp.exitPos) {
+        const d = Phaser.Math.Distance.Between(mx, my, sp.exitPos.x, sp.exitPos.y);
+        if (d < this.SPEED_PAD_EXIT_DIST) continue;
+        sp.exitPos = null;
+      }
+      // Contact: horizontal proximity + marble bottom near pad top
+      const dx = Math.abs(mx - sp.def.x);
+      const dy = Math.abs((my + this.R) - sp.def.y);
+      if (dx < this.SPEED_PAD_RADIUS && dy < 20) {
+        if (sp.def.vx !== 0) body.setVelocityX(sp.def.vx);
+        if (sp.def.vy !== 0) body.setVelocityY(sp.def.vy);
+        sp.exitPos = { x: mx, y: my };
+        // Brief yellow flash
+        const flash = this.add.graphics().setDepth(20);
+        flash.fillStyle(0xfbbf24, 0.7);
+        flash.fillRect(sp.def.x - 24, sp.def.y - 18, 48, 18);
+        this.tweens.add({ targets: flash, alpha: 0, duration: 180, onComplete: () => flash.destroy() });
+      }
+    }
+  }
+
+  // ── Timer format ───────────────────────────────────────────────────────────
+  private fmtTime(ms: number): string {
+    const secs = Math.floor(ms / 1000);
+    const cs   = Math.floor((ms % 1000) / 10);
+    const m    = Math.floor(secs / 60);
+    const s    = secs % 60;
+    return `${m}:${s.toString().padStart(2, '0')}.${cs.toString().padStart(2, '0')}`;
+  }
+
   private showGoalMessage(): void {
+    if (this.trialStartMs >= 0) {
+      const elapsed = this.time.now - this.trialStartMs;
+      if (this.bestTime === 0 || elapsed < this.bestTime) {
+        this.bestTime = elapsed;
+        localStorage.setItem(`best_${this.levelDef.id}`, String(elapsed));
+      }
+      this.timerText.setText(`${this.fmtTime(elapsed)}  ★`);
+    }
     const txt = this.add.text(
       this.marble.x, this.levelDef.groundY - 120,
       '🎉  SANDBOX COMPLETE!\nAll mechanics tested.',

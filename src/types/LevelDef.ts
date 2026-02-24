@@ -122,5 +122,16 @@ export interface LevelDef {
   /** In-world text labels — zone names, hints, mechanic callouts. */
   signs?:    SignDef[];
   /** Tilting pivot platforms. */
-  seesaws?:  SeesawDef[];
+  seesaws?:    SeesawDef[];
+  /** Ground-level pads that apply a one-shot velocity impulse on contact. */
+  speedPads?:  SpeedPadDef[];
+}
+
+// ── Speed pad ─────────────────────────────────────────────────────────────────
+export interface SpeedPadDef {
+  x:  number;
+  y:  number;
+  /** Impulse in px/s. vx = horizontal, vy = vertical (negative = up). */
+  vx: number;
+  vy: number;
 }
