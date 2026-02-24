@@ -871,10 +871,15 @@ export class MarblePlatform extends Phaser.Scene {
         this.marble.setScale(1 + t * 0.28 + jX, 1 - t * 0.22 + jY);
       }
       if (spaceJustUp) {
-        // Released: enter ARMED state — 250ms window to re-press and lock
-        this.chargeLockedT    = t;
-        this.chargeArmedUntil = time + this.LOCK_WINDOW_MS;
-        this.charging         = false;
+        this.charging = false;
+        if (time - this.chargeT0 < 50) {
+          // Quick tap (<50ms) — fire immediately at minimum power, skip ARMED
+          this.fireJump(body, 0);
+        } else {
+          // Normal release: enter ARMED state — 250ms window to re-press and lock
+          this.chargeLockedT    = t;
+          this.chargeArmedUntil = time + this.LOCK_WINDOW_MS;
+        }
       }
       return;
     }
