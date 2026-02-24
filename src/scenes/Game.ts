@@ -59,6 +59,20 @@ export class Game extends Phaser.Scene {
     this.pointer = this.input.activePointer;
     this.input.on('pointermove', () => { this.mouseActive = true; });
 
+    // Bypass Phaser input for mouse tracking — use native canvas events for accuracy
+    this.mouseMoveHandler = (e: MouseEvent) => {
+      const r = this.game.canvas.getBoundingClientRect();
+      this.mouseX = (e.clientX - r.left) * (800 / r.width);
+      this.mouseY = (e.clientY - r.top) * (600 / r.height);
+      this.mouseActive = true;
+    };
+    this.game.canvas.addEventListener('mousemove', this.mouseMoveHandler);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.mouseMoveHandler) {
+        this.game.canvas.removeEventListener('mousemove', this.mouseMoveHandler);
+      }
+    });
+
     // Create groups
     this.enemies = this.physics.add.group();
     this.projectiles = this.physics.add.group();
