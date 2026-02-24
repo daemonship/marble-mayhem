@@ -348,13 +348,19 @@ export class Game extends Phaser.Scene {
       }
     }
 
+    // Lead the target: enemy moves toward player at 100px/s, bullet at 400px/s.
+    // Bullet travel time ≈ dist/400; enemy covers dist/4 in that time toward player.
+    // Predicted position = 25% lerp from enemy toward player.
+    const leadX = nearest.x + (this.player.x - nearest.x) * 0.25;
+    const leadY = nearest.y + (this.player.y - nearest.y) * 0.25;
+
     // Create projectile(s) based on projectileCount
     const count = this.gameState.playerStats.projectileCount;
     for (let i = 0; i < count; i++) {
       // Add slight spread for multiple projectiles
       const spreadX = count > 1 ? (i - (count - 1) / 2) * 20 : 0;
       const spreadY = count > 1 ? (i - (count - 1) / 2) * 20 : 0;
-      this.createProjectile(nearest.x + spreadX, nearest.y + spreadY);
+      this.createProjectile(leadX + spreadX, leadY + spreadY);
     }
 
     // Play shoot SFX
@@ -516,10 +522,16 @@ export class Game extends Phaser.Scene {
   private pauseAndShowLevelUpModal(): void {
     this.isPaused = true;
     this.gameState.phase = 'paused';
-    
+
+    // Freeze physics (stops enemy/player/projectile movement) and Phaser
+    // time events (pauses bullet auto-destroy timers so they don't fire
+    // during the modal and destroy in-flight bullets).
+    this.physics.world.pause();
+    this.time.paused = true;
+
     // Pick 3 random upgrades
     this.pendingUpgrades = pickUpgrades(3);
-    
+
     // Show the modal
     this.showLevelUpModal(this.pendingUpgrades);
   }
@@ -631,6 +643,9 @@ export class Game extends Phaser.Scene {
       if (this.gameState.playerStats.health <= 0) {
         this.gameState.playerStats.health = 1;
       }
+      // Resume physics and timers — all velocities and positions are preserved
+      this.time.paused = false;
+      this.physics.world.resume();
       this.lastHitTime = this.time.now; // 1-second invincibility window on resume
       this.isPaused = false;
       this.gameState.phase = 'playing';
