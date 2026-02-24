@@ -23,6 +23,10 @@ export class Game extends Phaser.Scene {
   private mouseX: number = 400;
   private mouseY: number = 300;
   private mouseMoveHandler?: (e: MouseEvent) => void;
+  private hudGraphics!: Phaser.GameObjects.Graphics;
+  private hudHpText!: Phaser.GameObjects.Text;
+  private hudXpText!: Phaser.GameObjects.Text;
+  private hudStatsText!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: 'Game' });
@@ -148,10 +152,67 @@ export class Game extends Phaser.Scene {
     // Enable particles flag
     this.gameState.particlesEnabled = true;
 
+    // Build the in-canvas HUD
+    this.createHUD();
+
     // Show brief tutorial overlay unless this is attract mode
     if (!(window as any).attractModeActive) {
       this.showTutorialOverlay();
     }
+  }
+
+  private createHUD(): void {
+    const style = {
+      fontSize: '13px',
+      fontFamily: '"Courier New", Courier, monospace',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 3,
+    };
+    const depth = 95;
+    this.hudGraphics = this.add.graphics().setDepth(depth);
+    // Text centered in each of the three sections (canvas is 800px wide)
+    this.hudHpText    = this.add.text(133, 4, '', style).setOrigin(0.5, 0).setDepth(depth + 1);
+    this.hudXpText    = this.add.text(400, 4, '', style).setOrigin(0.5, 0).setDepth(depth + 1);
+    this.hudStatsText = this.add.text(667, 4, '', style).setOrigin(0.5, 0).setDepth(depth + 1);
+  }
+
+  private renderHUD(): void {
+    const g = this.hudGraphics;
+    g.clear();
+
+    const hp    = Math.max(0, this.gameState.playerStats.health);
+    const maxHp = this.gameState.playerStats.maxHealth;
+    const xp    = this.gameState.xp;
+    const xpMax = this.gameState.xpToNextLevel;
+
+    // Dark strip across the top of the canvas
+    g.fillStyle(0x000000, 0.65);
+    g.fillRect(0, 0, 800, 22);
+
+    // Subtle dividers between sections
+    g.fillStyle(0xffffff, 0.12);
+    g.fillRect(266, 1, 1, 20);
+    g.fillRect(533, 1, 1, 20);
+
+    // === HP bar (section 1: x 4–262) ===
+    const hpRatio = hp / maxHp;
+    g.fillStyle(0x4a1010);
+    g.fillRect(4, 6, 258, 10);
+    g.fillStyle(hpRatio > 0.5 ? 0x33ee66 : hpRatio > 0.25 ? 0xffaa00 : 0xff2200);
+    g.fillRect(4, 6, Math.round(258 * hpRatio), 10);
+
+    // === XP bar (section 2: x 270–529) ===
+    const xpRatio = Math.min(1, xp / xpMax);
+    g.fillStyle(0x1a0044);
+    g.fillRect(270, 6, 259, 10);
+    g.fillStyle(0x9944ff);
+    g.fillRect(270, 6, Math.round(259 * xpRatio), 10);
+
+    // === Text (drawn over bars with stroke for readability) ===
+    this.hudHpText.setText(`HP  ${Math.ceil(hp)} / ${maxHp}`);
+    this.hudXpText.setText(`Lv ${this.gameState.level}   XP  ${xp} / ${xpMax}`);
+    this.hudStatsText.setText(`${this.gameState.kills} kills   ${Math.floor(this.gameState.elapsedSeconds)}s`);
   }
 
   private showTutorialOverlay(): void {
@@ -208,6 +269,9 @@ export class Game extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
+    // HUD renders every frame regardless of pause state
+    this.renderHUD();
+
     // Skip all updates if paused
     if (this.isPaused) return;
 
