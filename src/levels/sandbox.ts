@@ -137,10 +137,24 @@ export const sandbox: LevelDef = {
   ],
 
   // ── Gems ─────────────────────────────────────────────────────────────────────
+  // Gems scattered throughout so the player has some to LOSE vs enemies (Zone 5).
   gems: [
-    { x: 9440, y: 504 },    // Gem 1: easy, on ground level
-    { x: 9715, y: 386 },    // Gem 2: elevated shelf (short jump)
-    { x: 10155, y: 266 },   // Gem 3: high platform (spring required)
+    // Zone 1 — surface strip: easy pickups to start accumulating
+    { x: 1960, y: 504 },    // on WET_METAL
+    { x: 2520, y: 504 },    // on GRASS
+    // Zone 2 — conveyor reward
+    { x: 4150, y: 504 },    // end of right belt
+    // Zone 3 — bounce pad chain (float up to grab)
+    { x: 5180, y: 296 },    // above the high bounce platform
+    // Zone 4 — portal reward
+    { x: 7100, y: 220 },    // on high platform (portal D exit)
+    // Zone 5 — in enemy arena (scatter bait before the Roller)
+    { x: 7960, y: 504 },    // just before Roller
+    { x: 8500, y: 504 },    // between Roller and Chaser arenas
+    // Zone 6 — final stretch (original gems)
+    { x: 9440, y: 504 },    // easy, on ground level
+    { x: 9715, y: 386 },    // elevated shelf (short jump)
+    { x: 10155, y: 266 },   // high platform (spring required)
   ],
 
   // ── Checkpoints ──────────────────────────────────────────────────────────────

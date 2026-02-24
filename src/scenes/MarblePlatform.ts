@@ -779,7 +779,7 @@ export class MarblePlatform extends Phaser.Scene {
     if (grounded && goRight && Math.abs(body.velocity.x) < 30) body.setVelocityX( KICK);
 
     const props = SURFACE_PROPS[surface];
-    const accel = this.ACCEL_X * (grounded ? 1.0 : 0.12) * props.accelMultiplier;
+    const accel = this.ACCEL_X * (grounded ? 1.0 : 0.15) * props.accelMultiplier;
 
     if (goLeft) {
       body.setAccelerationX(-accel);
