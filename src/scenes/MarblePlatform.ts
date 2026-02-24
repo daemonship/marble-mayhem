@@ -14,12 +14,17 @@ export class MarblePlatform extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: { A: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
 
-  private charging  = false;
-  private chargeT0  = 0;      // time charging started (ms)
+  private charging    = false;
+  private chargeT0    = 0;      // time charging started (ms)
   private hudText!: Phaser.GameObjects.Text;
   private chargeGfx!: Phaser.GameObjects.Graphics;  // screen-space: charge bar
   private glowGfx!: Phaser.GameObjects.Graphics;    // world-space: energy aura around marble
   private goalReached = false;
+
+  // Manual key-state tracking — JustDown() misses presses on some Phaser builds
+  private prevSpace = false;
+  private prevLeft  = false;
+  private prevRight = false;
 
   // Springs: visual + trigger zone
   private springs: Array<{ x: number; y: number; sprite: Phaser.GameObjects.Image }> = [];
@@ -350,6 +355,13 @@ export class MarblePlatform extends Phaser.Scene {
     // ── Horizontal movement ──────────────────────────────────────────────
     const goLeft  = this.cursors.left.isDown  || this.keys.A.isDown;
     const goRight = this.cursors.right.isDown || this.keys.D.isDown;
+    const justLeft  = goLeft  && !this.prevLeft;
+    const justRight = goRight && !this.prevRight;
+
+    // Kick impulse on first press so short taps give noticeable push
+    const KICK = 120;
+    if (justLeft  && body.velocity.x > -KICK) body.setVelocityX(-KICK);
+    if (justRight && body.velocity.x <  KICK) body.setVelocityX( KICK);
 
     if (goLeft) {
       body.setAccelerationX(-this.ACCEL_X);
@@ -366,9 +378,10 @@ export class MarblePlatform extends Phaser.Scene {
     }
 
     // ── Jump (charge-and-release) ────────────────────────────────────────
-    const space = this.cursors.space;
+    const space      = this.cursors.space;
+    const spaceJustDown = space.isDown && !this.prevSpace;
 
-    if (Phaser.Input.Keyboard.JustDown(space) && grounded && !this.charging) {
+    if (spaceJustDown && grounded && !this.charging) {
       this.charging = true;
       this.chargeT0 = time;
     }
@@ -490,6 +503,11 @@ export class MarblePlatform extends Phaser.Scene {
       `hspd: ${spd}  vspd: ${airSpd}  ${grounded ? '▓ ground' : '  air'}` +
       (this.charging ? `  ⚡ charge` : ''),
     );
+
+    // ── Input state snapshot (for next-frame edge detection) ─────────────
+    this.prevSpace = space.isDown;
+    this.prevLeft  = goLeft;
+    this.prevRight = goRight;
   }
 
   private respawn(): void {
