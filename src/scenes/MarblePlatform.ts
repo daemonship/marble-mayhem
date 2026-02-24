@@ -872,8 +872,8 @@ export class MarblePlatform extends Phaser.Scene {
       }
       if (spaceJustUp) {
         this.charging = false;
-        if (time - this.chargeT0 < 100) {
-          // Quick tap (<100ms) — fire immediately at minimum power, skip ARMED
+        if (time - this.chargeT0 < 150) {
+          // Quick tap (<150ms) — fire immediately at minimum power, skip ARMED
           this.fireJump(body, 0);
         } else {
           // Normal release: enter ARMED state — 250ms window to re-press and lock
