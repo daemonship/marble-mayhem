@@ -235,16 +235,16 @@ export class MarblePlatform extends Phaser.Scene {
     this.platforms = this.physics.add.staticGroup();
     const G = this.GROUND_Y;
 
-    //  Helper: add a visible tiled platform + matching static physics body
+    //  Helper: add a visible tiled platform + matching static physics body.
+    //  Must use platforms.create() (not physics.add.staticImage + add()) so
+    //  the body is properly registered with the group and found by the collider.
     const plat = (x: number, y: number, w: number, h = 32) => {
-      // Visual: tiled so the texture repeats naturally
+      // Visual: tileSprite tiles the texture at native resolution
       this.add.tileSprite(x + w / 2, y + h / 2, w, h, 'platTex').setDepth(4);
-      // Physics: invisible body sized to match
-      const body = this.physics.add.staticImage(x + w / 2, y + h / 2, '__DEFAULT')
-        .setVisible(false) as Phaser.Types.Physics.Arcade.ImageWithStaticBody;
-      (body.body as Phaser.Physics.Arcade.StaticBody).setSize(w, h);
-      body.refreshBody();
-      this.platforms.add(body);
+      // Physics: created through the group so the collider can find it
+      const pb = this.platforms.create(x + w / 2, y + h / 2, 'platTex') as Phaser.Types.Physics.Arcade.SpriteWithStaticBody;
+      pb.setDisplaySize(w, h).setVisible(false);
+      pb.refreshBody();
     };
 
     // ── Ground sections (gaps between them test jumping) ─────────────────
