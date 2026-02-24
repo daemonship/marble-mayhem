@@ -360,15 +360,19 @@ export class MarblePlatform extends Phaser.Scene {
     const justLeft  = goLeft  && !this.prevLeft;
     const justRight = goRight && !this.prevRight;
 
-    // Kick impulse on first press so short taps give noticeable push
+    // Kick impulse on first press so short taps give noticeable push (ground only)
     const KICK = 120;
-    if (justLeft  && body.velocity.x > -KICK) body.setVelocityX(-KICK);
-    if (justRight && body.velocity.x <  KICK) body.setVelocityX( KICK);
+    if (grounded && justLeft  && body.velocity.x > -KICK) body.setVelocityX(-KICK);
+    if (grounded && justRight && body.velocity.x <  KICK) body.setVelocityX( KICK);
+
+    // Air control is heavily reduced — player is mostly committed to launch trajectory.
+    // Tiny influence allows panic micro-corrections without undermining momentum strategy.
+    const accel = this.ACCEL_X * (grounded ? 1.0 : 0.12);
 
     if (goLeft) {
-      body.setAccelerationX(-this.ACCEL_X);
+      body.setAccelerationX(-accel);
     } else if (goRight) {
-      body.setAccelerationX(this.ACCEL_X);
+      body.setAccelerationX(accel);
     } else {
       body.setAccelerationX(0);
       // Rolling friction: decelerate when no key held — higher ROLL_DRAG = more momentum
