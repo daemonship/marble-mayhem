@@ -21,6 +21,7 @@ export class Game extends Phaser.Scene {
   private isPaused: boolean = false;
   private pendingUpgrades: UpgradeOption[] = [];
   private attractMode!: AttractMode;
+  private mouseActive: boolean = true;
 
   constructor() {
     super({ key: 'Game' });
@@ -53,6 +54,7 @@ export class Game extends Phaser.Scene {
     // Input
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.pointer = this.input.activePointer;
+    this.input.on('pointermove', () => { this.mouseActive = true; });
 
     // Create groups
     this.enemies = this.physics.add.group();
@@ -212,6 +214,11 @@ export class Game extends Phaser.Scene {
     // Update global gameState for testing
     this.updateGameState();
 
+    // DEBUG
+    if (this.debugText?.active) {
+      this.debugText.setText(`ptr: ${Math.floor(this.pointer.x)},${Math.floor(this.pointer.y)}  active:${this.mouseActive}  player: ${Math.floor(this.player.x)},${Math.floor(this.player.y)}`);
+    }
+
     // Apply health regen if any
     if (this.gameState.playerStats.healthRegen > 0) {
       this.gameState.playerStats.health = Math.min(
@@ -231,7 +238,7 @@ export class Game extends Phaser.Scene {
       targetX = botTarget.x;
       targetY = botTarget.y;
     } else {
-      // Mouse pointer position relative to game canvas
+      if (!this.mouseActive) return;
       targetX = this.pointer.x;
       targetY = this.pointer.y;
     }
@@ -517,7 +524,7 @@ export class Game extends Phaser.Scene {
       modal.style.justifyContent = 'center';
       modal.style.backgroundColor = 'rgba(0,0,0,0.7)';
       modal.style.zIndex = '1000';
-      document.body.appendChild(modal);
+      (document.getElementById('game-container') ?? document.body).appendChild(modal);
     }
 
     // Create modal content

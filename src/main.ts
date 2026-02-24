@@ -177,6 +177,7 @@ export function resetGameState(): void {
 
 // Create DOM overlay elements
 function createDOMOverlay(): void {
+  const container = document.getElementById('game-container') ?? document.body;
   // Start screen
   const startScreen = document.createElement('div');
   startScreen.id = 'start-screen';
@@ -213,7 +214,7 @@ function createDOMOverlay(): void {
       <p style="color: #6b7280; font-size: 0.8rem; margin-top: 1.2em;">Tip: Keep moving — standing still is fatal!</p>
     </div>
   `;
-  document.body.appendChild(startScreen);
+  container.appendChild(startScreen);
 
   // Mute button (top-right corner, always visible during gameplay)
   const muteButton = document.createElement('button');
@@ -231,7 +232,7 @@ function createDOMOverlay(): void {
   muteButton.style.zIndex = '150';
   muteButton.style.display = 'none'; // Hidden until game starts
   muteButton.setAttribute('aria-label', 'Toggle sound');
-  document.body.appendChild(muteButton);
+  container.appendChild(muteButton);
 
   // Wire up mute button
   muteButton.addEventListener('click', () => {
@@ -268,7 +269,7 @@ function createDOMOverlay(): void {
     <div>Time: <span id="timer-display">0</span>s</div>
     <div>Kills: <span id="kill-counter">0</span></div>
   `;
-  document.body.appendChild(hud);
+  container.appendChild(hud);
 
   // Game over screen (hidden initially)
   const gameOverScreen = document.createElement('div');
@@ -294,7 +295,7 @@ function createDOMOverlay(): void {
       <button id="play-again-btn" style="font-size: 1.5rem; padding: 0.5em 1em; cursor: pointer;">Play Again</button>
     </div>
   `;
-  document.body.appendChild(gameOverScreen);
+  container.appendChild(gameOverScreen);
 
   // Wire up button events
   const startBtn = document.getElementById('start-run-btn');
@@ -392,7 +393,10 @@ const config: Phaser.Types.Core.GameConfig = {
   width: 800,
   height: 600,
   backgroundColor: '#222222',
-  parent: document.getElementById('app') ?? undefined,
+  parent: document.getElementById('game-container') ?? undefined,
+  scale: {
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+  },
   physics: {
     default: 'arcade',
     arcade: {
