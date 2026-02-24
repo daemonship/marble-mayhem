@@ -13,7 +13,7 @@ test.describe('Game Over stats match final game state', () => {
   test('game over screen stats match HUD values at end of run', async ({ page }) => {
     page.setDefaultTimeout(130000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     // Wait for at least one level-up to have occurred (ensures meaningful stats)
@@ -49,7 +49,7 @@ test.describe('Game Over stats match final game state', () => {
   test('game over time stat is a valid elapsed time', async ({ page }) => {
     page.setDefaultTimeout(130000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     await expect(page.locator('#game-over-screen')).toBeVisible({ timeout: 120000 });

@@ -27,7 +27,7 @@ const APP_URL = process.env.APP_URL || '/';
 
 async function startGame(page: import('@playwright/test').Page) {
   await page.goto(APP_URL);
-  await page.locator('button', { hasText: 'Start Run' }).click();
+  await page.locator('#start-run-btn').click();
   await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 }
 
@@ -109,7 +109,7 @@ test.describe('Task 4 — HUD, screens, and feedback polish', () => {
   test('game over screen stats match rapid-death scenario', async ({ page }) => {
     page.setDefaultTimeout(130000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     await expect(page.locator('#game-over-screen')).toBeVisible({ timeout: 120000 });

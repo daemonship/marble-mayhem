@@ -21,7 +21,7 @@ const APP_URL = process.env.APP_URL || '/';
 async function startGame(page: import('@playwright/test').Page) {
   await page.goto(APP_URL);
   await expect(page.locator('#start-screen')).toBeVisible({ timeout: 5000 });
-  await page.locator('button', { hasText: 'Start Run' }).click();
+  await page.locator('#start-run-btn').click();
   await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
   await page.waitForFunction(() => (window as any).gameState?.phase === 'playing', {
     timeout: 5000,

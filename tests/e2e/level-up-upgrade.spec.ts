@@ -21,7 +21,7 @@ test.describe('Level-up upgrade modifies gameplay', () => {
   test('level-up modal appears and game is paused', async ({ page }) => {
     page.setDefaultTimeout(100000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     await waitForLevelUpModal(page);
@@ -39,7 +39,7 @@ test.describe('Level-up upgrade modifies gameplay', () => {
   test('modal shows exactly 3 unique upgrade options', async ({ page }) => {
     page.setDefaultTimeout(100000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     await waitForLevelUpModal(page);
@@ -56,7 +56,7 @@ test.describe('Level-up upgrade modifies gameplay', () => {
   test('selecting +Attack Speed upgrade closes modal and resumes game', async ({ page }) => {
     page.setDefaultTimeout(100000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     await waitForLevelUpModal(page);
@@ -86,7 +86,7 @@ test.describe('Level-up upgrade modifies gameplay', () => {
   test('+Attack Speed upgrade produces measurably faster fire rate', async ({ page }) => {
     page.setDefaultTimeout(120000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     // Record fire interval before any upgrade via window.gameState

@@ -19,7 +19,7 @@ test.describe('Modal interactions are blocked during game pause', () => {
   test('clicking outside the modal does not resume the game', async ({ page }) => {
     page.setDefaultTimeout(100000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     await waitForLevelUpModal(page);
@@ -43,7 +43,7 @@ test.describe('Modal interactions are blocked during game pause', () => {
   test('enemies do not move while level-up modal is open', async ({ page }) => {
     page.setDefaultTimeout(100000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     await waitForLevelUpModal(page);
@@ -73,7 +73,7 @@ test.describe('Modal interactions are blocked during game pause', () => {
   test('selecting an upgrade closes the modal and resumes the game', async ({ page }) => {
     page.setDefaultTimeout(100000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     await waitForLevelUpModal(page);
@@ -94,7 +94,7 @@ test.describe('Modal interactions are blocked during game pause', () => {
   test('only modal buttons are interactive while modal is open', async ({ page }) => {
     page.setDefaultTimeout(100000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     await waitForLevelUpModal(page);

@@ -1,66 +1,67 @@
 # RESUME — SPUDSTORM
-Date: 2026-02-23
-Status: Active — mouse input fixes deployed, awaiting user verification
+**Date:** 2026-02-23
+**Status:** IN PROGRESS — mouse fix deployed (0d8cf2e), awaiting user confirmation
 
-## Current State
+---
 
-Canvas layout and mouse input have been overhauled. Root cause was identified: CSS
-transform: translate(-50%, -50%) broke Phaser pointer coordinates. Fixes applied:
-- Removed CSS transform, flexbox centering used instead
-- mouseActive set true immediately in create()
-- DOM mousemove event tracks coordinates (not Phaser pointer)
+## What Was Being Worked On
 
-All fixes committed and pushed to main. Cloudflare Pages auto-deploy triggered.
+Fixing mouse input so the player character follows the mouse in the browser game at https://spudstorm.pages.dev (Cloudflare Pages).
 
-**Live URL:** https://spudstorm.pages.dev
+The game is Phaser 3 / TypeScript. Canvas is 800x600. Player is controlled by mouse movement.
 
-**Recent commits:**
-- `9fe5b6a` chore: update handoff docs and archive
-- `f940ce7` fix: use DOM-tracked mouse coords instead of Phaser pointer
-- `0603563` fix: correct canvas layout, input system, and mouse tracking
-- `f392d53` fix: address PR review findings — race condition, tween lifecycle, play-again path
-- `d592da5` fix: add instructions, title screen, and fix attract mode bugs
+---
 
-**Bugs fixed (all done):**
-- CSS transform breaking Phaser pointer coordinate mapping — removed transform
-- mouseActive gated on first pointermove (could stick false) — now true in create()
-- DOM mouse tracking now used instead of Phaser pointer
-- Attract mode flag reset race condition (flags set inside setTimeout after scene.stop)
-- Tutorial tween lifecycle (SHUTDOWN guard added)
-- Play Again path missing attract mode resets
-- Debug overlay removed from production build
+## Current State (commit 0d8cf2e)
 
-**UX improvements (all done):**
-- Start screen with title, subtitle, full How to Play panel
-- In-game tutorial overlay (3 lines, fades after ~4s)
+### Root Cause Identified & Fixed
+- **Problem**: `canvas.addEventListener('mousemove', ...)` only fires when mouse is over the canvas element. Phaser forces `position: absolute` on the canvas which pins it to `(0,0)` of the container. On large screens, the canvas occupies the upper-left 800×600 area while the user's mouse is in the center — missing the canvas entirely → zero events → player stays put.
+- **Fix**: Switched to `window.addEventListener('mousemove', ...)` so events fire regardless of mouse position anywhere on screen. Coordinates converted via `getBoundingClientRect()` to game space.
 
-**Git state:** CONTEXT_SPUDSTORM.md, RESUME_SPUDSTORM.md, memory/working_memory.md
-are all modified (M) — need commit + push.
+### Also Fixed
+- Canvas centering: CSS `top/left/right/bottom: 0; margin: auto` on `#game-container canvas` — works with Phaser's `position: absolute` without breaking `getBoundingClientRect()`
+- Removed `scale.autoCenter: CENTER_BOTH` from Phaser config (was fighting with CSS centering)
+- Added debug overlay: `canvas@X,Y ptr:X,Y player:X,Y` at bottom of canvas
 
-## IMMEDIATE NEXT TASK
+### Files Changed (commit 0d8cf2e)
+- `src/scenes/Game.ts` — `window.addEventListener` instead of `canvas.addEventListener`, debug overlay
+- `src/main.ts` — removed autoCenter
+- `index.html` — CSS canvas centering rule
 
-1. **Verify the game works** — open https://spudstorm.pages.dev, click Start, move mouse.
-   Does the yellow player square follow the mouse? Do enemies spawn and approach?
-   If yes: game is working, move on to new features.
-   If no: read src/scenes/Game.ts updatePlayerMovement() and check DOM mouse handler setup.
+### Debug Overlay
+Yellow text at bottom of canvas during gameplay:
+```
+canvas@X,Y  ptr:X,Y  player:X,Y
+```
+- `canvas@X,Y` = canvas top-left in viewport (should be ~560,240 on 1920×1080; 0,0 means centering broke)
+- `ptr:X,Y` = computed game-space mouse coords (should follow mouse, 0–800 / 0–600 range)
+- `player:X,Y` = player position (should follow ptr with slight lag)
 
-2. **Commit handoff docs and push:**
+---
+
+## Diagnosis Guide (if still broken)
+
+| Debug output | Meaning | Fix |
+|---|---|---|
+| `canvas@0,0` | Canvas not centered — CSS not applied | Check browser DevTools for canvas element style |
+| `ptr: 0,0` regardless of mouse | window.mousemove handler not firing | Check for JS errors in console |
+| `ptr: X,Y` correct, player doesn't move | Logic bug in `updatePlayerMovement` | Check `mouseActive` guard (~line 270) |
+| `ptr:` wildly out of range | Canvas coords wrong — `getBoundingClientRect` off | Check for CSS transforms on canvas |
+
+---
+
+## Deployment Command
+
 ```bash
-git add CONTEXT_SPUDSTORM.md RESUME_SPUDSTORM.md memory/working_memory.md
-git commit -m "chore: update handoff docs"
-git push origin main
+cd /home/shazbot/Projects/products/games/spudstorm
+npm run build && CLOUDFLARE_API_TOKEN=$(cat /home/shazbot/credentials/cloudflare-token.txt) npx wrangler pages deploy dist --project-name spudstorm
 ```
 
-3. **If mouse still broken**, check:
-   - `git diff HEAD src/scenes/Game.ts` — confirm DOM mouse listener is present
-   - Look for `window.addEventListener('mousemove'` in Game.ts create()
-   - Look for `this.mouseX` / `this.mouseY` usage in updatePlayerMovement()
+---
 
 ## Key Files
-- src/scenes/Game.ts — main game scene, mouse tracking, tutorial overlay
-- src/main.ts — start screen, attractModeActive reset, canvas config
-- index.html — #game-container flexbox layout
-- src/systems/AttractMode.ts — bot controller for idle demo
 
-## Context
-See CONTEXT_SPUDSTORM.md for full session summary.
+- `src/scenes/Game.ts` — `mouseMoveHandler` ~line 65, `debugText` ~line 79, `updatePlayerMovement()` ~line 260
+- `src/main.ts` — Phaser config
+- `index.html` — canvas CSS centering
+- `memory/MEMORY.md` — project memory

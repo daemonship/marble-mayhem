@@ -15,7 +15,7 @@ test.describe('Game state resets on page refresh mid-game', () => {
     await expect(page.locator('#start-screen')).toBeVisible({ timeout: 5000 });
 
     // Start a run
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     // Play for ~10 seconds to accumulate state
@@ -39,7 +39,7 @@ test.describe('Game state resets on page refresh mid-game', () => {
     await expect(page.locator('#game-over-screen')).toBeHidden();
 
     // Start a new run and verify clean state
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     const levelText = await page.locator('#level-display').textContent();
@@ -55,7 +55,7 @@ test.describe('Game state resets on page refresh mid-game', () => {
 
   test('game does not persist state in localStorage across refreshes', async ({ page }) => {
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
     await page.waitForTimeout(5000);
 

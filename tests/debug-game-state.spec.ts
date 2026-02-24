@@ -9,7 +9,7 @@ test('debug game state', async ({ page }) => {
   await expect(page.locator('#start-screen')).toBeVisible({ timeout: 5000 });
   
   // Click start
-  await page.locator('button', { hasText: 'Start Run' }).click();
+  await page.locator('#start-run-btn').click();
   
   // Wait a bit for scene to start
   await page.waitForTimeout(1000);

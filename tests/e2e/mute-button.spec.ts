@@ -15,7 +15,7 @@ test.describe('Mute button', () => {
     await page.goto(APP_URL);
 
     // Start the game
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
 
     // Wait for game to start
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
@@ -40,7 +40,7 @@ test.describe('Mute button', () => {
     await page.goto(APP_URL);
 
     // Start the game
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
 
     // Wait for game to start
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
@@ -73,7 +73,7 @@ test.describe('Mute button', () => {
     await page.goto(APP_URL);
 
     // Start the game
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
 
     // Wait for game to start
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
@@ -89,7 +89,7 @@ test.describe('Mute button', () => {
     await page.goto(APP_URL);
 
     // Start the game
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
 
     // Wait for game to start
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
@@ -109,7 +109,7 @@ test.describe('Mute button', () => {
     await page.goto(APP_URL);
 
     // Start the game
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
 
     // Wait for game to start
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
@@ -138,7 +138,7 @@ test.describe('Mute button', () => {
     await page.goto(APP_URL);
 
     // Start the game
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
 
     // Wait for game to start
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
@@ -156,7 +156,7 @@ test.describe('Mute button', () => {
     await page.goto(APP_URL);
 
     // Start the game
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
 
     // Wait for game to start
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });

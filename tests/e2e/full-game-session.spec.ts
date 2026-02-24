@@ -3,7 +3,7 @@
  *
  * DOM contract (implementation must provide):
  *   #start-screen          — visible on initial load
- *   button "Start Run"     — inside #start-screen
+ *   #start-run-btn         — start button inside #start-screen
  *   #hud                   — visible once game starts
  *   #health-bar            — DOM progress bar; aria-valuenow = current HP
  *   #xp-bar                — DOM progress bar; aria-valuenow = current XP
@@ -28,14 +28,14 @@ test.describe('Full game session from start to game over', () => {
     const startScreen = page.locator('#start-screen');
     await expect(startScreen).toBeVisible({ timeout: 5000 });
 
-    const startBtn = startScreen.locator('button', { hasText: 'Start Run' });
+    const startBtn = startScreen.locator('#start-run-btn');
     await expect(startBtn).toBeVisible();
   });
 
   test('clicking Start Run shows the HUD with all required elements', async ({ page }) => {
     await page.goto(APP_URL);
 
-    await page.locator('#start-screen').locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-screen').locator('#start-run-btn').click();
 
     const hud = page.locator('#hud');
     await expect(hud).toBeVisible({ timeout: 3000 });
@@ -52,7 +52,7 @@ test.describe('Full game session from start to game over', () => {
 
   test('kill counter increments above 0 within 30 seconds', async ({ page }) => {
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     await expect(async () => {
@@ -64,7 +64,7 @@ test.describe('Full game session from start to game over', () => {
 
   test('health bar decreases when player takes damage', async ({ page }) => {
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#health-bar')).toBeVisible({ timeout: 3000 });
 
     const initialHp = await page
@@ -92,7 +92,7 @@ test.describe('Full game session from start to game over', () => {
     // Give the game up to 2 minutes to reach game over naturally
     page.setDefaultTimeout(130000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     const gameOverScreen = page.locator('#game-over-screen');
@@ -115,7 +115,7 @@ test.describe('Full game session from start to game over', () => {
   test('clicking Play Again starts a fresh game at level 1 with 0 kills', async ({ page }) => {
     page.setDefaultTimeout(130000);
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Start Run' }).click();
+    await page.locator('#start-run-btn').click();
     await expect(page.locator('#hud')).toBeVisible({ timeout: 3000 });
 
     await expect(page.locator('#game-over-screen')).toBeVisible({ timeout: 120000 });
