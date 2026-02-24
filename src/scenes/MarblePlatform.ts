@@ -88,7 +88,7 @@ interface ScatteredGem {
   y:         number;
   vx:        number;
   vy:        number;
-  spawnTime: number;
+  readonly spawnTime: number;
 }
 
 interface RuntimeSpeedPad {
@@ -205,8 +205,10 @@ export class MarblePlatform extends Phaser.Scene {
     this.levelDef  = sandbox;
     this.respawnX  = this.levelDef.spawnX;
     this.respawnY  = this.levelDef.spawnY;
-    const stored   = localStorage.getItem(`best_${this.levelDef.id}`);
-    this.bestTime  = stored ? parseInt(stored, 10) : 0;
+    let stored: string | null = null;
+    try { stored = localStorage.getItem(`best_${this.levelDef.id}`); } catch { /* private/restricted browsing */ }
+    const parsed  = stored ? parseInt(stored, 10) : NaN;
+    this.bestTime = Number.isFinite(parsed) ? parsed : 0;
 
     this.physics.world.setBounds(0, -400, this.levelDef.worldW, 1100);
     this.cameras.main.setBounds(0, -400, this.levelDef.worldW, 1100);
@@ -1055,6 +1057,8 @@ export class MarblePlatform extends Phaser.Scene {
       sg.vy += 700 * dt;
       sg.x  += sg.vx * dt;
       sg.y  += sg.vy * dt;
+      // Clamp to world bounds horizontally so gems don't fly off-screen indefinitely
+      sg.x = Phaser.Math.Clamp(sg.x, 0, this.levelDef.worldW);
       // Bounce off ground
       if (sg.y > this.levelDef.groundY - 14) {
         sg.y   = this.levelDef.groundY - 14;
@@ -1062,7 +1066,7 @@ export class MarblePlatform extends Phaser.Scene {
         sg.vx *= 0.75;
       }
       sg.img.setPosition(sg.x, sg.y).setAlpha(Math.min(1, (5000 - age) / 800));
-      // Collect scattered gem
+      // Collect scattered gem (after physics so distance uses updated position)
       if (Phaser.Math.Distance.Between(mx, my, sg.x, sg.y) < this.R + 14) {
         if (this.gemCount < this.gems.length) this.gemCount++;
         sg.img.destroy();
@@ -1184,10 +1188,18 @@ export class MarblePlatform extends Phaser.Scene {
     this.chargeArmedUntil = 0;
     this.trialStartMs     = -1;
     this.gemCount         = 0;
+    this.goalReached      = false;
     this.marble.setScale(1);
     // Destroy any in-flight scattered gems
     for (const sg of this.scatteredGems) sg.img.destroy();
     this.scatteredGems = [];
+    // Restore static gems so they can be collected again after death
+    for (const gem of this.gems) {
+      if (gem.collected) {
+        gem.collected = false;
+        gem.img.setPosition(gem.x, gem.y).setAlpha(1);
+      }
+    }
     const body = this.marble.body as Phaser.Physics.Arcade.Body;
     body.reset(this.respawnX, this.respawnY);
     this.tweens.add({
@@ -1198,7 +1210,8 @@ export class MarblePlatform extends Phaser.Scene {
 
   // ── Gem scatter (Sonic ring-loss) ─────────────────────────────────────────
   private scatterGems(time: number): void {
-    const n = Math.max(this.gemCount, 5);
+    if (this.gemCount === 0) return;   // nothing to lose — no phantom gems
+    const n = this.gemCount;
     this.gemCount = 0;
     for (let i = 0; i < n; i++) {
       const angle = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
@@ -1247,6 +1260,7 @@ export class MarblePlatform extends Phaser.Scene {
 
   // ── Timer format ───────────────────────────────────────────────────────────
   private fmtTime(ms: number): string {
+    if (!Number.isFinite(ms) || ms < 0) return '0:00.00';
     const secs = Math.floor(ms / 1000);
     const cs   = Math.floor((ms % 1000) / 10);
     const m    = Math.floor(secs / 60);
@@ -1259,7 +1273,7 @@ export class MarblePlatform extends Phaser.Scene {
       const elapsed = this.time.now - this.trialStartMs;
       if (this.bestTime === 0 || elapsed < this.bestTime) {
         this.bestTime = elapsed;
-        localStorage.setItem(`best_${this.levelDef.id}`, String(elapsed));
+        try { localStorage.setItem(`best_${this.levelDef.id}`, String(elapsed)); } catch { /* storage full / restricted */ }
       }
       this.timerText.setText(`${this.fmtTime(elapsed)}  ★`);
     }

@@ -207,9 +207,9 @@ export const sandbox: LevelDef = {
   // Zone 3 entry: horizontal boost onto bounce pad chain
   speedPads: [
     // Exit of Zone 2 — rightward blast to clear the 180px gap into Zone 3
-    { x: 4460, y: G, vx: 520, vy: -200 } as SpeedPadDef,
+    { x: 4460, y: G, vx: 520, vy: -200 },
     // Mid Zone 5 — boost helps kill the Roller at speed
-    { x: 8200, y: G, vx: 480, vy: 0 } as SpeedPadDef,
+    { x: 8200, y: G, vx: 480, vy: 0 },
   ],
 
   // ── Seesaws ───────────────────────────────────────────────────────────────

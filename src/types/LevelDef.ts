@@ -98,6 +98,15 @@ export interface SeesawDef {
   gems?:    SeesawGemDef[];
 }
 
+// ── Speed pad ─────────────────────────────────────────────────────────────────
+export interface SpeedPadDef {
+  x:  number;
+  y:  number;
+  /** Impulse in px/s. vx = horizontal, vy = vertical (negative = up). At least one must be non-zero. */
+  vx: number;
+  vy: number;
+}
+
 export interface LevelDef {
   id: string;
   /** World number (1-indexed). */
@@ -127,11 +136,3 @@ export interface LevelDef {
   speedPads?:  SpeedPadDef[];
 }
 
-// ── Speed pad ─────────────────────────────────────────────────────────────────
-export interface SpeedPadDef {
-  x:  number;
-  y:  number;
-  /** Impulse in px/s. vx = horizontal, vy = vertical (negative = up). */
-  vx: number;
-  vy: number;
-}
