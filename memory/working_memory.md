@@ -1806,3 +1806,33 @@ Context at 191k / 200k tokens. Handoff running automatically — session will re
 
 === Auto-restart triggered. New session starting... ===
 [Bash: CLOUDFLARE_API_TOKEN=$(cat /home/shazbot/credentials/clou...]
+
+[2026-02-24T00:17] > Stop hook feedback:
+[python3 ~/.claude/hooks/stop_dispatcher.py]: 
+<context-critical>
+Context at 193k / 200k tokens. Handoff running automatically — session will restart.
+</context-critical>
+
+
+=== Auto-restart triggered. New session starting... ===
+Yes/no: mouse working at spudstorm.pages.dev?
+
+[2026-02-24T00:18] > Stop hook feedback:
+[python3 ~/.claude/hooks/stop_dispatcher.py]: 
+<context-critical>
+Context at 193k / 200k tokens. Handoff running automatically — session will restart.
+</context-critical>
+
+
+=== Auto-restart triggered. New session starting... ===
+spudstorm.pages.dev - mouse working?
+
+[2026-02-24T00:18] > Stop hook feedback:
+[python3 ~/.claude/hooks/stop_dispatcher.py]: 
+<context-critical>
+Context at 194k / 200k tokens. Handoff running automatically — session will restart.
+</context-critical>
+
+
+=== Auto-restart triggered. New session starting... ===
+👋
