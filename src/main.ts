@@ -16,6 +16,7 @@ declare global {
 }
 
 import Phaser from 'phaser';
+import { MarbleTest } from './scenes/MarbleTest';
 import { Boot } from './scenes/Boot';
 import { Preload } from './scenes/Preload';
 import { MainMenu } from './scenes/MainMenu';
@@ -423,7 +424,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [Boot, Preload, MainMenu, Game, GameOver],
+  scene: [MarbleTest, Boot, Preload, MainMenu, Game, GameOver],
 };
 
 const game = new Phaser.Game(config);
@@ -432,5 +433,8 @@ window.gameState = gameState;
 
 // Create DOM overlay after game is created
 createDOMOverlay();
+
+// Marble Mayhem branch: skip the spudstorm start screen, go straight to prototype
+document.getElementById('start-screen')?.style.setProperty('display', 'none');
 
 export {};
