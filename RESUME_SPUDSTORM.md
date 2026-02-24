@@ -1,32 +1,63 @@
 # RESUME — SPUDSTORM
+Date: 2026-02-23
+Status: Active development — mouse input debug session interrupted by context limit
 
-**Date:** 2026-02-23
-**Status:** Mouse tracking fixed via DOM coords. Game playable. Needs play-test verification.
+## Current State
 
-## What Was Done This Session
-1. Fixed attract mode bugs (delta undefined, attractModeActive not reset on game start)
-2. Added title screen and instructions so player knows mouse controls the character
-3. Fixed canvas layout and Phaser input system issues
-4. Switched to DOM-tracked mouse coords instead of Phaser pointer (last major fix)
-5. Removed debug overlay after confirming fixes
+Multiple rounds of bug fixes applied. Game is functional locally. Recent sessions
+have been caught in context/handoff loops without doing new feature work.
+
+**Recent commits:**
+- `26245b3` chore: update handoff docs and archive
+- `3856c32` chore: update handoff docs
+- `04233e1` chore: remove debug overlay, update handoff docs
+- `f940ce7` fix: use DOM-tracked mouse coords instead of Phaser pointer
+- `0603563` fix: correct canvas layout, input system, and mouse tracking
+- `f392d53` fix: address PR review findings — race condition, tween lifecycle, play-again path
+- `d592da5` fix: add instructions, title screen, and fix attract mode bugs
+
+**Bugs fixed (all done):**
+- delta undefined in attract mode — fixed to deltaSeconds * 1000
+- attractModeActive not cleared on fresh start — now reset on Start click
+- Canvas layout (flexbox not transform), mouseActive init to true
+- Race condition, tween lifecycle, play-again path
+- DOM mouse tracking instead of Phaser pointer
+- Debug overlay removed from production build
+
+**UX improvements (all done):**
+- Start screen with title, subtitle, full How to Play panel
+- In-game tutorial overlay (3 lines, fades after ~4s)
+
+**Deploy status:** Local commits are ahead of remote. Need to push to main to trigger
+Cloudflare Pages auto-deploy at https://spudstorm.pages.dev.
+
+**Git state:** CONTEXT_SPUDSTORM.md and RESUME_SPUDSTORM.md are modified (M) — need commit + push.
 
 ## IMMEDIATE NEXT TASK
-Play-test the game at Cloudflare Pages URL. Verify:
-1. Mouse movement controls the player correctly
-2. Enemies spawn and game is actually playable end-to-end
-3. Attract mode does not interfere with normal play after clicking Start
-4. Play Again path works after game over
 
-If mouse still broken, check src/scenes/Game.ts — mouse input uses DOM-tracked coordinates.
+This session was debugging mouse input. Session read Game.ts and checked git diff but
+ran out of context before making any fixes. Resume:
+
+1. Read src/scenes/Game.ts — check updatePlayerMovement() and debug overlay status
+2. Run: `git diff HEAD src/scenes/Game.ts` — see if any local changes exist
+3. Commit handoff docs and push:
+```bash
+cd /home/shazbot/Projects/products/games/spudstorm
+git add CONTEXT_SPUDSTORM.md RESUME_SPUDSTORM.md
+git commit -m "chore: update handoff docs"
+git push origin main
+```
+4. Verify https://spudstorm.pages.dev — click Start, confirm mouse aims player without wiggle
+5. If debug overlay still visible on site, remove from Game.ts, rebuild and redeploy:
+```bash
+npm run build && CLOUDFLARE_API_TOKEN=$(cat /home/shazbot/credentials/cloudflare-token.txt) npx wrangler pages deploy dist --project-name spudstorm
+```
 
 ## Key Files
-- src/scenes/Game.ts — main game scene, mouse input, player movement
-- src/scenes/MainMenu.ts — title screen and instructions
-- src/systems/AttractMode.ts — attract mode system (was buggy, now fixed)
+- src/scenes/Game.ts — main game scene, attract mode, tutorial overlay
+- src/main.ts — start screen, attractModeActive reset
+- src/scenes/MainMenu.ts — title/menu scene
+- src/systems/AttractMode.ts — bot controller for idle demo
 
-## Git State
-Last commit: 04233e1 chore: remove debug overlay, update handoff docs
-Uncommitted: CONTEXT_SPUDSTORM.md, memory/working_memory.md
-
-## Context File
-See CONTEXT_SPUDSTORM.md for full session transcript summary.
+## Context
+See CONTEXT_SPUDSTORM.md for full session summary.
