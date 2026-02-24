@@ -91,13 +91,28 @@ export class MarblePlatform extends Phaser.Scene {
   private levelDef!: LevelDef;
 
   // ── Core marble state ──────────────────────────────────────────────────────
-  private charging           = false;
+  private charging           = false;   // space held, charge building
   private chargeT0           = 0;
   private chargeStartSurface: SurfaceType = SurfaceType.CONCRETE;
   private goalReached        = false;
 
+  // Charge-lock mechanic:
+  //   Hold SPACE → charge builds.  Release quickly → 250ms window opens.
+  //   Re-press within window → charge locked at that level, bar freezes.
+  //   Release again → fire at locked level.
+  //   If 250ms expires without re-press → auto-fire at released level.
+  private chargeLocked    = false;  // charge locked, waiting for final release
+  private chargeLockedT   = 0;      // locked t value (0-1)
+  private chargeArmedUntil = 0;     // >0 = "armed" period: fire on timeout or lock on re-press
+  private readonly LOCK_WINDOW_MS = 250;
+
   // Space edge detection (JustDown() is unreliable on some Phaser builds)
   private prevSpace = false;
+
+  // Coyote time: treat marble as grounded for 80ms after leaving a platform.
+  // Prevents 1-2 frame grounded flickers from blocking KICK and jump initiation.
+  private lastGroundedAt = 0;
+  private readonly COYOTE_MS = 80;
 
   // Respawn anchor — updated when a checkpoint is activated
   private respawnX = 0;
@@ -141,6 +156,11 @@ export class MarblePlatform extends Phaser.Scene {
 
   // ── Parallax layers ────────────────────────────────────────────────────────
   private pxLayers: Array<{ ts: Phaser.GameObjects.TileSprite; factor: number }> = [];
+
+  // True whenever any part of the charge state is active (blocks springs, rotation, etc.)
+  private get isChargeActive(): boolean {
+    return this.charging || this.chargeLocked || this.chargeArmedUntil > 0;
+  }
 
   constructor() { super({ key: 'MarblePlatform' }); }
 
@@ -550,9 +570,10 @@ export class MarblePlatform extends Phaser.Scene {
   // UPDATE — main loop
   // ═══════════════════════════════════════════════════════════════════════════
   update(time: number, delta: number): void {
-    const body     = this.marble.body as Phaser.Physics.Arcade.Body;
-    const dt       = delta / 1000;
-    const grounded = body.blocked.down;
+    const body      = this.marble.body as Phaser.Physics.Arcade.Body;
+    const dt        = delta / 1000;
+    if (body.blocked.down) this.lastGroundedAt = time;
+    const grounded  = body.blocked.down || (time - this.lastGroundedAt < this.COYOTE_MS);
 
     this.updateParallax();
     const surface = this.getSurface(grounded);
@@ -663,19 +684,51 @@ export class MarblePlatform extends Phaser.Scene {
   }
 
   // ── Jump ─────────────────────────────────────────────────────────────────
+  // Charge states:
+  //   IDLE      → charging=false, chargeLocked=false, chargeArmedUntil=0
+  //   CHARGING  → charging=true (space held, t growing)
+  //   ARMED     → chargeArmedUntil>0 (space released, 250ms window open)
+  //   LOCKED    → chargeLocked=true (re-pressed in window, charge frozen at lockedT)
   private updateJump(time: number, body: Phaser.Physics.Arcade.Body, grounded: boolean, surface: SurfaceType): void {
-    const space         = this.cursors.space;
-    const spaceJustDown = space.isDown && !this.prevSpace;
+    const space        = this.cursors.space;
+    const spaceDown    = space.isDown;
+    const spaceJustDown = spaceDown && !this.prevSpace;
+    const spaceJustUp  = !spaceDown && this.prevSpace;
 
-    if (spaceJustDown && grounded && !this.charging) {
-      this.charging           = true;
-      this.chargeT0           = time;
-      this.chargeStartSurface = surface;  // capture surface at jump start
+    // ── ARMED: check for re-press (lock) or timeout (fire) ─────────────────
+    if (this.chargeArmedUntil > 0) {
+      if (spaceJustDown) {
+        // Re-pressed within window → lock the charge
+        this.chargeLocked     = true;
+        this.chargeArmedUntil = 0;
+      } else if (time >= this.chargeArmedUntil) {
+        // Timed out without re-press → fire at locked level
+        this.fireJump(body, this.chargeLockedT);
+        this.chargeArmedUntil = 0;
+      }
+      return;  // no further processing while armed
     }
 
+    // ── LOCKED: hold at locked level, fire on release ──────────────────────
+    if (this.chargeLocked) {
+      if (!this.goalReached) {
+        const t = this.chargeLockedT;
+        const jiggleFreq = 0.018 + t * 0.038;
+        const jiggleAmp  = 0.03 + t * 0.05;
+        const jX = Math.sin(time * jiggleFreq) * jiggleAmp;
+        const jY = Math.sin(time * jiggleFreq * 1.31) * jiggleAmp;
+        this.marble.setScale(1 + t * 0.28 + jX, 1 - t * 0.22 + jY);
+      }
+      if (spaceJustUp) {
+        this.chargeLocked = false;
+        this.fireJump(body, this.chargeLockedT);
+      }
+      return;
+    }
+
+    // ── CHARGING: space held, t growing ────────────────────────────────────
     if (this.charging) {
       const t = Math.min((time - this.chargeT0) / this.MAX_CHARGE, 1);
-
       if (!this.goalReached) {
         const jiggleFreq = 0.014 + t * 0.038;
         const jiggleAmp  = t * 0.07;
@@ -683,27 +736,39 @@ export class MarblePlatform extends Phaser.Scene {
         const jY = Math.sin(time * jiggleFreq * 1.31) * jiggleAmp;
         this.marble.setScale(1 + t * 0.28 + jX, 1 - t * 0.22 + jY);
       }
-
-      // Release only when player lets go — no auto-release at max charge.
-      // At full charge the glow pulses red to signal "release now".
-      if (!space.isDown) {
-        const surfaceProps = SURFACE_PROPS[this.chargeStartSurface];
-        const jumpV = Phaser.Math.Linear(this.JUMP_MIN, this.JUMP_MAX, t) * surfaceProps.jumpMultiplier;
-        body.setVelocityY(-jumpV);
-        this.charging = false;
-        this.tweens.add({
-          targets: this.marble,
-          scaleX: 1 - t * 0.22, scaleY: 1 + t * 0.28,
-          duration: 60, yoyo: true,
-          onComplete: () => this.marble.setScale(1),
-        });
+      if (spaceJustUp) {
+        // Released: enter ARMED state — 250ms window to re-press and lock
+        this.chargeLockedT    = t;
+        this.chargeArmedUntil = time + this.LOCK_WINDOW_MS;
+        this.charging         = false;
       }
+      return;
     }
+
+    // ── IDLE: start charging on fresh press ────────────────────────────────
+    if (spaceJustDown && grounded) {
+      this.charging           = true;
+      this.chargeT0           = time;
+      this.chargeStartSurface = surface;
+    }
+  }
+
+  private fireJump(body: Phaser.Physics.Arcade.Body, t: number): void {
+    const props = SURFACE_PROPS[this.chargeStartSurface];
+    const jumpV = Phaser.Math.Linear(this.JUMP_MIN, this.JUMP_MAX, t) * props.jumpMultiplier;
+    body.setVelocityY(-jumpV);
+    this.marble.setScale(1);
+    this.tweens.add({
+      targets: this.marble,
+      scaleX: 1 - t * 0.22, scaleY: 1 + t * 0.28,
+      duration: 60, yoyo: true,
+      onComplete: () => this.marble.setScale(1),
+    });
   }
 
   // ── Springs ───────────────────────────────────────────────────────────────
   private updateSprings(body: Phaser.Physics.Arcade.Body, grounded: boolean): void {
-    if (this.charging || !grounded) return;
+    if (this.isChargeActive || !grounded) return;
     for (const sp of this.springs) {
       const dx = Math.abs(this.marble.x - sp.x);
       const dy = Math.abs(this.marble.y - sp.y);
@@ -873,23 +938,32 @@ export class MarblePlatform extends Phaser.Scene {
 
   // ── Visuals: rolling + charge aura + charge bar + portals ─────────────────
   private updateVisuals(time: number, body: Phaser.Physics.Arcade.Body, dt: number, grounded: boolean): void {
-    // Rolling rotation
-    if (!this.charging) {
+    // Rolling rotation — disabled while any charge state is active
+    if (!this.isChargeActive) {
       this.marble.rotation += (body.velocity.x / this.R) * dt;
     }
 
+    // Resolve charge t for visual purposes
+    // charging: current build-up; locked/armed: fixed locked level
+    const visualT = this.charging
+      ? Math.min((time - this.chargeT0) / this.MAX_CHARGE, 1)
+      : this.isChargeActive ? this.chargeLockedT : null;
+
     // Charge aura
     this.glowGfx.clear();
-    if (this.charging) {
-      const t     = Math.min((time - this.chargeT0) / this.MAX_CHARGE, 1);
+    if (visualT !== null) {
+      const t     = visualT;
       const mx    = this.marble.x, my = this.marble.y;
-      const color = t < 0.5 ? 0x3b82f6 : t < 0.85 ? 0xf59e0b : 0xef4444;
-      const pulse = Math.sin(time * 0.009) * 0.5 + 0.5;
+      // Locked state: shift color toward green to indicate "ready to fire"
+      const color = this.chargeLocked
+        ? 0x22c55e
+        : (t < 0.5 ? 0x3b82f6 : t < 0.85 ? 0xf59e0b : 0xef4444);
+      const pulse = Math.sin(time * (this.chargeLocked ? 0.014 : 0.009)) * 0.5 + 0.5;
       this.glowGfx.fillStyle(color, (0.12 + t * 0.22) * (0.6 + pulse * 0.4));
       this.glowGfx.fillCircle(mx, my, this.R + 6 + t * 18 + pulse * 5);
       this.glowGfx.fillStyle(color, 0.35 + t * 0.35);
       this.glowGfx.fillCircle(mx, my, this.R + 1 + t * 7);
-      if (t >= 1) {
+      if (t >= 1 && !this.chargeLocked) {
         const flash = Math.sin(time * 0.03) * 0.5 + 0.5;
         this.glowGfx.fillStyle(0xffffff, 0.25 * flash);
         this.glowGfx.fillCircle(mx, my, this.R - 2);
@@ -898,11 +972,14 @@ export class MarblePlatform extends Phaser.Scene {
 
     // Charge bar
     this.chargeGfx.clear();
-    if (this.charging) {
-      const t  = Math.min((time - this.chargeT0) / this.MAX_CHARGE, 1);
+    if (visualT !== null) {
+      const t  = visualT;
       const bx = 340, by = 565, bw = 120;
       this.chargeGfx.fillStyle(0x1f2937); this.chargeGfx.fillRect(bx - 1, by - 1, bw + 2, 14);
-      this.chargeGfx.fillStyle(t < 0.5 ? 0x3b82f6 : t < 0.85 ? 0xf59e0b : 0xef4444);
+      const barColor = this.chargeLocked
+        ? 0x22c55e
+        : (t < 0.5 ? 0x3b82f6 : t < 0.85 ? 0xf59e0b : 0xef4444);
+      this.chargeGfx.fillStyle(barColor);
       this.chargeGfx.fillRect(bx, by, Math.round(bw * t), 12);
       this.chargeGfx.lineStyle(1, 0x4b5563); this.chargeGfx.strokeRect(bx - 1, by - 1, bw + 2, 14);
     }
@@ -926,7 +1003,7 @@ export class MarblePlatform extends Phaser.Scene {
 
     this.hudText.setText(
       `hspd: ${spd}  vspd: ${vspd}  ${grounded ? '▓ ' + surfLabel : '  air'}` +
-      (this.charging ? '  ⚡' : '') +
+      (this.isChargeActive ? (this.chargeLocked ? '  🔒' : '  ⚡') : '') +
       `  gems: ${gems}/${total}`,
     );
   }
@@ -946,7 +1023,9 @@ export class MarblePlatform extends Phaser.Scene {
   // HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
   private respawn(): void {
-    this.charging = false;
+    this.charging      = false;
+    this.chargeLocked  = false;
+    this.chargeArmedUntil = 0;
     this.marble.setScale(1);
     const body = this.marble.body as Phaser.Physics.Arcade.Body;
     body.reset(this.respawnX, this.respawnY);
