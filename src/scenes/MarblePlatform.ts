@@ -796,6 +796,19 @@ export class MarblePlatform extends Phaser.Scene {
     const goLeft  = this.cursors.left.isDown  || this.keys.A.isDown;
     const goRight = this.cursors.right.isDown || this.keys.D.isDown;
 
+    // If stopped (or near-stopped) while charging and a direction key is pressed,
+    // cancel the charge so movement can begin immediately.
+    if (this.isChargeActive && (goLeft || goRight) && Math.abs(body.velocity.x) < 30) {
+      this.charging         = false;
+      this.chargeLocked     = false;
+      this.chargeArmedUntil = 0;
+      this.marble.setScale(1);
+    }
+
+    // No movement while a charge is active — you're planted.
+    // Deceleration still runs via updateBrake.
+    if (this.isChargeActive) return;
+
     // Startup kick: fires whenever grounded, key held, and speed is near-zero.
     // Ensures responsive restart from rest even when key was held while decelerating.
     const KICK = 150;
