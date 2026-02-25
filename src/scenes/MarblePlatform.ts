@@ -1354,20 +1354,24 @@ export class MarblePlatform extends Phaser.Scene {
     const STRIPE  = 0x5ba4e8;
 
     if (launchT > 0) {
-      // Launch spring: legs stay anchored to ground Y, fade as marble rises
+      // Launch spring: legs retract back into ball (endpoint walks from foot to marble)
       const groundY = this.legLaunchGroundY;
       for (const side of [-1, 1]) {
-        const ox = mx + side * legSep;
-        const oy = my + this.R;
-        // Feet spread wide then close as launchT fades
-        const footX = mx + side * this.R * (0.7 + 0.6 * launchT) - velTilt * this.R;
+        const ox    = mx + side * legSep;
+        const oy    = my + this.R;
+        const footX = mx + side * this.R * 1.3 - velTilt * this.R;
         const footY = groundY;  // anchored to where ground was at jump
-        this.legsGfx.lineStyle(5, SKIN, launchT);
-        this.legsGfx.lineBetween(ox, oy, footX, footY);
-        this.legsGfx.fillStyle(SHOE, launchT);
-        this.legsGfx.fillRoundedRect(footX - 8, footY - 4, 16, 7, 3);
-        this.legsGfx.fillStyle(STRIPE, launchT * 0.9);
-        this.legsGfx.fillRect(footX - 6, footY - 3, 12, 2);
+        // Visible tip walks from foot back toward marble origin as launchT → 0
+        const tipX = ox + (footX - ox) * launchT;
+        const tipY = oy + (footY - oy) * launchT;
+        this.legsGfx.lineStyle(5, SKIN, 0.93);
+        this.legsGfx.lineBetween(ox, oy, tipX, tipY);
+        if (launchT > 0.25) {  // shoe disappears as it tucks back in
+          this.legsGfx.fillStyle(SHOE, 0.95);
+          this.legsGfx.fillRoundedRect(tipX - 8, tipY - 4, 16, 7, 3);
+          this.legsGfx.fillStyle(STRIPE, 0.85);
+          this.legsGfx.fillRect(tipX - 6, tipY - 3, 12, 2);
+        }
       }
       return;
     }
