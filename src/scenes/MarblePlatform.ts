@@ -22,7 +22,8 @@ interface SurfaceProps {
 
 const SURFACE_PROPS: Record<SurfaceType, SurfaceProps> = {
   //                          drag    accel   maxVx   bounceY  jump
-  [SurfaceType.CONCRETE]:   { drag: 0.930, accelMultiplier: 1.00, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 1.00 },
+  // Concrete drag tuned for ~2s coast from max speed (MAX_VX=420)
+  [SurfaceType.CONCRETE]:   { drag: 0.675, accelMultiplier: 1.00, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 1.00 },
   [SurfaceType.GRASS]:      { drag: 0.905, accelMultiplier: 0.90, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 0.92 },
   [SurfaceType.SAND]:       { drag: 0.860, accelMultiplier: 0.65, maxVxMultiplier: 1.00, bounceY: 0.00, jumpMultiplier: 0.80 },
   [SurfaceType.MUD]:        { drag: 0.820, accelMultiplier: 0.45, maxVxMultiplier: 0.40, bounceY: 0.00, jumpMultiplier: 0.65 },
@@ -145,6 +146,10 @@ export class MarblePlatform extends Phaser.Scene {
   private invincibleUntil = 0;
 
   // ── Physics knobs ─────────────────────────────────────────────────────────
+  // Acceptance criteria:
+  //   - Tap jump: 330 px/s (JUMP_MIN)
+  //   - Full charge jump: 740 px/s (JUMP_MAX)
+  //   - Concrete coast: ~2s from max speed (MAX_VX=420)
   private readonly R           = 18;
   private readonly GRAVITY     = 980;
   private readonly ACCEL_X     = 700;
