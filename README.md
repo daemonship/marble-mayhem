@@ -13,8 +13,8 @@
 | Physics model | ✅ Complete | Charge-jump, momentum carry, air control, directional momentum |
 | Level data format (LevelDef) | ✅ Complete | LevelDef interface + SurfaceType enum |
 | Terrain surface system + sandbox | ✅ Complete | 9 surface types with distinct physics |
-| Repo migration | 🚧 In Progress | Creating marble-mayhem repo, simplifying main.ts |
-| World 1 level design (8 levels) | 📋 Planned | city, pipes, laboratory, factory, icy cavern, sand dunes, rainy rooftop, final boss |
+| Repo migration | ✅ Complete | marble-mayhem repo created, main.ts simplified |
+| World 1 level design (8 levels) | ✅ Complete | city, pipes, laboratory, factory, icy cavern, sand dunes, rainy rooftop, final boss |
 | Game flow (menu → level select → play → win) | 📋 Planned | Title screen, level select, level complete, death/respawn |
 | Progression and gem tracking | 📋 Planned | localStorage persistence, level unlock, star rating |
 | SFX | 📋 Planned | Web Audio API - rolling, jump, surface transitions |
