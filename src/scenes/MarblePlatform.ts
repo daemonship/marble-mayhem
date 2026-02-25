@@ -172,9 +172,11 @@ export class MarblePlatform extends Phaser.Scene {
   private glowGfx!:   Phaser.GameObjects.Graphics;
 
   // ── Foot drag brake ────────────────────────────────────────────────────────
-  private braking    = false;
-  private shiftKey!: Phaser.Input.Keyboard.Key;
-  private footGfx!:  Phaser.GameObjects.Graphics;
+  private braking        = false;
+  private shiftKey!:       Phaser.Input.Keyboard.Key;
+  private footGfx!:        Phaser.GameObjects.Graphics;
+  private brakeExtension = 0;   // animated leg length (0 = retracted, R*2 = fully stretched)
+  private brakeDir       = 1;   // last travel direction while braking (for retract visual)
 
   // ── Jump legs ──────────────────────────────────────────────────────────────
   private legsGfx!:  Phaser.GameObjects.Graphics;
@@ -1257,32 +1259,44 @@ export class MarblePlatform extends Phaser.Scene {
     this.footGfx.clear();
     const vx    = body.velocity.x;
     const speed = Math.abs(vx);
-    if (!this.braking || !grounded || speed < 8) return;
+    const activelyBraking = this.braking && grounded && speed > 8;
 
-    // Blend normal surface drag toward aggressive brake drag, weighted by grip
-    const effectiveness: Record<SurfaceType, number> = {
-      [SurfaceType.ICE]:       0.00,  // foot skates — no help
-      [SurfaceType.WET_METAL]: 0.15,  // slick — almost nothing
-      [SurfaceType.SNOW]:      0.50,
-      [SurfaceType.BOUNCE_PAD]:0.60,
-      [SurfaceType.CONVEYOR]:  0.75,
-      [SurfaceType.GRASS]:     0.90,
-      [SurfaceType.CONCRETE]:  1.00,
-      [SurfaceType.SAND]:      1.35,  // foot digs in — very effective
-      [SurfaceType.MUD]:       1.60,  // deep drag — maximum
-    };
-    const eff       = effectiveness[surface] ?? 1.0;
-    const normDrag  = SURFACE_PROPS[surface].drag;
-    const brakeDrag = normDrag - (normDrag - 0.78) * eff;
-    body.setVelocityX(vx * Math.pow(brakeDrag, dt / 0.01667));
+    // Remember last direction of travel so retract visual aims the right way
+    if (speed > 8) this.brakeDir = vx > 0 ? 1 : -1;
 
-    // ── Trailing foot visual ────────────────────────────────────────────────
+    // ── Animate extension: shoot out fast, retract slower ──────────────────
+    const maxExt    = this.R * 2.0;
+    const targetExt = activelyBraking ? maxExt : 0;
+    const rate      = targetExt > this.brakeExtension ? 22 : 9;
+    this.brakeExtension += (targetExt - this.brakeExtension) * dt * rate;
+    this.brakeExtension  = Math.max(0, this.brakeExtension);
+
+    // ── Physics: decelerate to a full stop ─────────────────────────────────
+    if (activelyBraking) {
+      const effectiveness: Record<SurfaceType, number> = {
+        [SurfaceType.ICE]:       0.00,  // foot skates — no help
+        [SurfaceType.WET_METAL]: 0.15,  // slick — almost nothing
+        [SurfaceType.SNOW]:      0.50,
+        [SurfaceType.BOUNCE_PAD]:0.60,
+        [SurfaceType.CONVEYOR]:  0.75,
+        [SurfaceType.GRASS]:     0.90,
+        [SurfaceType.CONCRETE]:  1.00,
+        [SurfaceType.SAND]:      1.35,  // foot digs in — very effective
+        [SurfaceType.MUD]:       1.60,  // deep drag — maximum
+      };
+      const eff       = effectiveness[surface] ?? 1.0;
+      const normDrag  = SURFACE_PROPS[surface].drag;
+      const brakeDrag = normDrag - (normDrag - 0.84) * eff;  // 0.84 = gentler than before
+      const newVx     = vx * Math.pow(brakeDrag, dt / 0.01667);
+      body.setVelocityX(Math.abs(newVx) < 20 ? 0 : newVx);  // clamp to full stop
+    }
+
+    // ── Visual: draw whenever leg is at all visible ─────────────────────────
+    if (this.brakeExtension < 0.5) return;
+
     const mx  = this.marble.x;
     const my  = this.marble.y;
-    const dir = vx > 0 ? 1 : -1;          // travel direction; foot trails opposite
-
-    // Foot extends further behind at higher speed
-    const extension = Math.min(speed * 0.08, this.R * 2.4);
+    const dir = this.brakeDir;
 
     // Surface dig depth (visual compression into ground)
     const digDepth: Record<SurfaceType, number> = {
@@ -1302,8 +1316,8 @@ export class MarblePlatform extends Phaser.Scene {
     const ox = mx - dir * this.R * 0.55;
     const oy = my + this.R * 0.65;
 
-    // Foot contact point: behind marble at surface + dig
-    const fx = mx - dir * (this.R * 0.9 + extension);
+    // Foot contact point: behind marble, distance = animated extension
+    const fx = mx - dir * (this.R * 0.9 + this.brakeExtension);
     const fy = my + this.R + dig;
 
     // Shin line (skin tone)
@@ -1311,9 +1325,8 @@ export class MarblePlatform extends Phaser.Scene {
     this.footGfx.lineBetween(ox, oy, fx, fy - 3);
 
     // Shoe (elongated, toe pointing backward away from marble)
-    const shoeW = 15 + extension * 0.12;
+    const shoeW = 15 + this.brakeExtension * 0.12;
     const toeX  = fx - dir * shoeW * 0.58;
-    const heelX = fx + dir * shoeW * 0.42;   // eslint-disable-line @typescript-eslint/no-unused-vars
     this.footGfx.fillStyle(0x2c2c4a, 1.0);
     this.footGfx.fillRoundedRect(Math.min(toeX, fx + dir * shoeW * 0.42), fy - 4, shoeW, 7, 3);
     // Sneaker accent stripe
