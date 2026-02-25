@@ -1,14 +1,8 @@
-# Spud Storm
+# Marble Mayhem
 
-**[Play it live → spudstorm.pages.dev](https://spudstorm.pages.dev)**
+**[Play it live → marble-mayhem.pages.dev](https://marble-mayhem.pages.dev)**
 
-> An instantly playable browser bullet-heaven where you guide a heroic spud through waves of relentless enemies, collecting XP and choosing upgrades to survive as long as possible.
-
-## Feedback & Ideas
-
-> **This project is being built in public and we want to hear from you.**
-> Found a bug? Have a feature idea? Something feel wrong or missing?
-> **[Open an issue](../../issues)** — every piece of feedback directly shapes what gets built next.
+> A physics platformer where you guide a heroic marble through obstacle courses with charge-jumps, momentum mechanics, and surface-specific physics.
 
 ## Status
 
@@ -16,22 +10,16 @@
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Project scaffold & CI | ✅ Complete | Vite + TypeScript + Playwright, 42 tests |
-| Core gameplay engine | 🚧 In Progress | Mouse-follow, enemies, auto-shoot, XP gems |
-| Progression system & upgrades | 📋 Planned | XP bar, level-up modal, 8 upgrades |
-| HUD, screens & polish | 📋 Planned | DOM overlay UI, hit flash, SFX, particles |
-| Code review | 📋 Planned | |
-| Pre-launch verification | 📋 Planned | |
-| Deploy to Cloudflare Pages | ✅ Complete | https://spudstorm.pages.dev |
-| Difficulty system | 📋 Planned | |
-
-## What It Solves
-
-Bullet heaven/survivors-like games are popular but often require downloads or have complex controls. There's a gap for an instantly playable, browser-based version with a humorous hook and simple upgrade progression.
-
-## Who It's For
-
-Players who enjoy Vampire Survivors or Brotato but want a quick, no-install fix; fans of quirky, character-driven action games.
+| Physics model | ✅ Complete | Charge-jump, momentum carry, air control, directional momentum |
+| Level data format (LevelDef) | ✅ Complete | LevelDef interface + SurfaceType enum |
+| Terrain surface system + sandbox | ✅ Complete | 9 surface types with distinct physics |
+| Repo migration | 🚧 In Progress | Creating marble-mayhem repo, simplifying main.ts |
+| World 1 level design (8 levels) | 📋 Planned | city, pipes, laboratory, factory, icy cavern, sand dunes, rainy rooftop, final boss |
+| Game flow (menu → level select → play → win) | 📋 Planned | Title screen, level select, level complete, death/respawn |
+| Progression and gem tracking | 📋 Planned | localStorage persistence, level unlock, star rating |
+| SFX | 📋 Planned | Web Audio API - rolling, jump, surface transitions |
+| Polish pass | 📋 Planned | Particles, camera shake, level transitions, mobile controls |
+| Level editor (optional) | 📋 Planned | In-browser drag-and-drop builder |
 
 ## Tech Stack
 
@@ -40,6 +28,7 @@ Players who enjoy Vampire Survivors or Brotato but want a quick, no-install fix;
 - **Bundler:** Vite
 - **Testing:** Playwright (e2e browser automation)
 - **CI:** GitHub Actions
+- **Hosting:** Cloudflare Pages
 
 ## Development
 
@@ -52,19 +41,12 @@ npm run lint         # ESLint
 npm test             # Playwright e2e tests (requires build first)
 ```
 
-## Testing Strategy
+## Controls
 
-All tests are Playwright browser tests against a running instance of the game. The `APP_URL` environment variable controls which URL is tested:
-
-```bash
-# Test against local build (default)
-npm run build && npm test
-
-# Test against a deployed URL
-APP_URL=https://spudstorm.pages.dev npm test
-```
-
-Tests are currently **red** — implementations for Tasks 2–4 will make them green.
+- **A/D** or **Arrow Keys** — Roll left/right
+- **SPACE** — Charge jump (hold to charge, release to jump)
+- **SHIFT** — Brake (slow down)
+- **Re-press SPACE after charge** — Lock charge at current level
 
 ---
 
