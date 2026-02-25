@@ -182,6 +182,7 @@ export class MarblePlatform extends Phaser.Scene {
   // ── Foot drag brake ────────────────────────────────────────────────────────
   private braking        = false;
   private shiftKey!:       Phaser.Input.Keyboard.Key;
+  private editorKey!:      Phaser.Input.Keyboard.Key;
   private footGfx!:        Phaser.GameObjects.Graphics;
   private brakeExtension = 0;   // animated leg length (0 = retracted, R*2 = fully stretched)
   private brakeDir       = 1;   // last travel direction while braking (for retract visual)
@@ -683,6 +684,7 @@ export class MarblePlatform extends Phaser.Scene {
     }) as { A: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
     this.input.keyboard!.addCapture(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.shiftKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+    this.editorKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -692,6 +694,10 @@ export class MarblePlatform extends Phaser.Scene {
     const body = this.marble.body as Phaser.Physics.Arcade.Body;
     const dt   = delta / 1000;
     this.braking = this.shiftKey.isDown;
+    if (Phaser.Input.Keyboard.JustDown(this.editorKey)) {
+      this.scene.start('LevelEditor', { levelDef: this.levelDef });
+      return;
+    }
 
     // ── Grounded detection ─────────────────────────────────────────────────
     // body.blocked.down is unreliable for circular bodies — supplement with

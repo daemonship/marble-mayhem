@@ -12,6 +12,7 @@ import { TitleScreen } from './scenes/TitleScreen';
 import { LevelSelect } from './scenes/LevelSelect';
 import { MarblePlatform } from './scenes/MarblePlatform';
 import { LevelComplete } from './scenes/LevelComplete';
+import { LevelEditor } from './scenes/LevelEditor';
 
 // Initialize Phaser game
 const config: Phaser.Types.Core.GameConfig = {
@@ -32,7 +33,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [TitleScreen, LevelSelect, MarblePlatform, LevelComplete],
+  scene: [TitleScreen, LevelSelect, MarblePlatform, LevelComplete, LevelEditor],
 };
 
 const game = new Phaser.Game(config);
