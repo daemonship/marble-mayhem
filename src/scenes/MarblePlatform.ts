@@ -811,8 +811,8 @@ export class MarblePlatform extends Phaser.Scene {
     }
 
     // No movement while a charge is active — you're planted.
-    // Deceleration still runs via updateBrake.
-    if (this.isChargeActive) return;
+    // Clear acceleration first or Phaser keeps applying whatever was set last frame.
+    if (this.isChargeActive) { body.setAccelerationX(0); return; }
 
     // Startup kick: fires whenever grounded, key held, and speed is near-zero.
     // Ensures responsive restart from rest even when key was held while decelerating.
