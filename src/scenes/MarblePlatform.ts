@@ -678,7 +678,7 @@ export class MarblePlatform extends Phaser.Scene {
     this.updateParallax();
     const surface = contact.onSeesaw ? SurfaceType.CONCRETE : this.getSurface(grounded);
     this.updateSurface(body, grounded, surface, dt);
-    this.updateMovement(body, grounded, surface, dt);
+    this.updateMovement(body, grounded, surface, dt, time);
     this.updateBrake(body, grounded, surface, dt);
 
     // Apply gravity component along seesaw slope (marble slides toward lower arm)
@@ -792,17 +792,22 @@ export class MarblePlatform extends Phaser.Scene {
     grounded: boolean,
     surface: SurfaceType,
     dt: number,
+    time: number,
   ): void {
     const goLeft  = this.cursors.left.isDown  || this.keys.A.isDown;
     const goRight = this.cursors.right.isDown || this.keys.D.isDown;
 
     // If stopped (or near-stopped) while charging and a direction key is pressed,
-    // cancel the charge so movement can begin immediately.
+    // discharge the charge (fire the jump) — you can't move without jumping first.
     if (this.isChargeActive && (goLeft || goRight) && Math.abs(body.velocity.x) < 30) {
+      const t = (this.chargeLocked || this.chargeArmedUntil > 0)
+        ? this.chargeLockedT
+        : Math.min((time - this.chargeT0) / this.MAX_CHARGE, 1);
       this.charging         = false;
       this.chargeLocked     = false;
       this.chargeArmedUntil = 0;
-      this.marble.setScale(1);
+      this.fireJump(body, t);
+      // Fall through — movement input applies as air control this frame.
     }
 
     // No movement while a charge is active — you're planted.
