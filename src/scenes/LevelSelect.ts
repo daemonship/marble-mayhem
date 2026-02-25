@@ -1,18 +1,9 @@
 import Phaser from 'phaser';
-import * as Levels from '../levels';
+import * as PM from '../progression/ProgressManager';
+import type { LevelProgress, WorldStats } from '../progression/ProgressManager';
 
-// Level completion tracking
-interface LevelProgress {
-  levelId: string;
-  completed: boolean;
-  gems: number;
-  totalGems: number;
-  bestTime: number;
-}
-
-// LevelSelect scene — grid of levels with locked/unlocked states
+// LevelSelect scene — grid of levels with locked/unlocked states, world stats bar.
 export class LevelSelect extends Phaser.Scene {
-  private levels: Array<{ id: string; world: number; level: number; name: string }> = [];
   private progress: Map<string, LevelProgress> = new Map();
   private levelButtons: Phaser.GameObjects.Container[] = [];
   private backButton!: Phaser.GameObjects.Container;
@@ -24,210 +15,203 @@ export class LevelSelect extends Phaser.Scene {
   create(): void {
     const { width, height } = this.cameras.main;
 
-    // Load progress from localStorage
-    this.loadProgress();
+    this.progress = PM.loadAll();
 
-    // Build level list
-    this.buildLevelList();
-
-    // Create background
     this.createBackground(width, height);
 
     // Title
-    this.add.text(width / 2, 50, 'SELECT LEVEL', {
-      fontSize: '48px',
+    this.add.text(width / 2, 45, 'SELECT LEVEL', {
+      fontSize: '44px',
       fontFamily: 'Arial Black, Arial, sans-serif',
       color: '#fbbf24',
       stroke: '#1e3a8a',
-      strokeThickness: 6
+      strokeThickness: 6,
     }).setOrigin(0.5).setDepth(10);
 
-    // Create level grid
+    // World stats bar (always shown; turns gold on completion)
+    this.createWorldStatsBar(width);
+
+    // Level grid
     this.createLevelGrid(width, height);
 
     // Back button
-    this.createBackButton(width, height);
+    this.createBackButton();
 
     // Instructions
-    this.add.text(width / 2, height - 40, 'Click a level to play • ESC to return', {
-      fontSize: '14px',
-      fontFamily: 'monospace',
-      color: '#6b7280'
+    this.add.text(width / 2, height - 30, 'Click a level to play  •  ESC to return', {
+      fontSize: '13px', fontFamily: 'monospace', color: '#6b7280'
     }).setOrigin(0.5).setDepth(10);
 
     // ESC to return to title
-    this.input.keyboard!.once('keydown-ESC', () => {
-      this.returnToTitle();
-    });
+    this.input.keyboard!.once('keydown-ESC', () => this.returnToTitle());
   }
 
-  private loadProgress(): void {
-    try {
-      const saved = localStorage.getItem('marble_mayhem_progress');
-      if (saved) {
-        const data = JSON.parse(saved);
-        for (const entry of data) {
-          this.progress.set(entry.levelId, entry);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load progress:', e);
-    }
-  }
-
-  private saveProgress(): void {
-    try {
-      const data = Array.from(this.progress.values());
-      localStorage.setItem('marble_mayhem_progress', JSON.stringify(data));
-    } catch (e) {
-      console.warn('Failed to save progress:', e);
-    }
-  }
-
-  private buildLevelList(): void {
-    // Build level list from imported levels
-    const levelDefs = [
-      { id: 'world1_level1', key: 'world1_level1', world: 1, level: 1, name: 'City Start' },
-      { id: 'world1_level2', key: 'world1_level2', world: 1, level: 2, name: 'Pipe Dreams' },
-      { id: 'world1_level3', key: 'world1_level3', world: 1, level: 3, name: 'Lab Test' },
-      { id: 'world1_level4', key: 'world1_level4', world: 1, level: 4, name: 'Factory Floor' },
-      { id: 'world1_level5', key: 'world1_level5', world: 1, level: 5, name: 'Icy Cavern' },
-      { id: 'world1_level6', key: 'world1_level6', world: 1, level: 6, name: 'Sand Dunes' },
-      { id: 'world1_level7', key: 'world1_level7', world: 1, level: 7, name: 'Rainy Rooftop' },
-      { id: 'world1_level8', key: 'world1_level8', world: 1, level: 8, name: 'Final Showdown' },
-      { id: 'sandbox', key: 'sandbox', world: 0, level: 0, name: 'Sandbox' },
-    ];
-
-    this.levels = levelDefs;
-  }
+  // ── Background ──────────────────────────────────────────────────────────────
 
   private createBackground(width: number, height: number): void {
-    // Dark gradient background
     const bg = this.add.graphics();
     bg.fillGradientStyle(0x0a0a1a, 0x0a0a1a, 0x1e1e3f, 0x1e1e3f, 1);
     bg.fillRect(0, 0, width, height);
     bg.setDepth(-10);
   }
 
-  private createLevelGrid(width: number, height: number): void {
-    const startX = 100;
-    const startY = 120;
-    const buttonWidth = 180;
-    const buttonHeight = 100;
-    const gapX = 20;
-    const gapY = 20;
-    const cols = 4;
+  // ── World stats bar ─────────────────────────────────────────────────────────
 
-    // Filter out sandbox for main grid (we'll add it separately)
-    const mainLevels = this.levels.filter(l => l.world > 0);
+  private createWorldStatsBar(width: number): void {
+    const stats      = PM.getWorldStats();
+    const isComplete = PM.isWorld1Complete() || stats.isComplete;
+    const isPerfect  = PM.isWorld1Perfect()  || stats.isPerfect;
 
-    for (let i = 0; i < mainLevels.length; i++) {
-      const level = mainLevels[i];
-      const col = i % cols;
-      const row = Math.floor(i / cols);
+    const barY    = 88;
+    const barH    = 34;
+    const barFill = isPerfect ? 0x3d2e00 : isComplete ? 0x0a2e0a : 0x1e293b;
+    const border  = isPerfect ? 0xffd700  : isComplete ? 0x22c55e  : 0x3b82f6;
 
-      const x = startX + col * (buttonWidth + gapX);
-      const y = startY + row * (buttonHeight + gapY);
+    const bg = this.add.graphics();
+    bg.fillStyle(barFill, 0.95);
+    bg.fillRoundedRect(width / 2 - 320, barY, 640, barH, 6);
+    bg.lineStyle(2, border, 1);
+    bg.strokeRoundedRect(width / 2 - 320, barY, 640, barH, 6);
+    bg.setDepth(10);
 
-      const button = this.createLevelButton(x, y, buttonWidth, buttonHeight, level);
-      this.levelButtons.push(button);
-    }
+    // Stars
+    const starColor  = isPerfect ? '#ffd700' : isComplete ? '#a3e635' : '#fbbf24';
+    const starLabel  = `★ ${stats.starsEarned}/${stats.starsTotal}`;
 
-    // Add sandbox button at the bottom
-    const sandbox = this.levels.find(l => l.id === 'sandbox');
-    if (sandbox) {
-      const x = width / 2;
-      const y = height - 150;
-      const button = this.createLevelButton(x, y, 200, 60, sandbox, true);
-      this.levelButtons.push(button);
+    this.add.text(width / 2 - 300, barY + barH / 2, starLabel, {
+      fontSize: '18px', fontFamily: 'Arial Black, Arial, sans-serif', color: starColor
+    }).setOrigin(0, 0.5).setDepth(11);
+
+    // Gem tally
+    const gemLabel = `💎 ${stats.gemsCollected}/${stats.gemsTotal}`;
+    this.add.text(width / 2 - 120, barY + barH / 2, gemLabel, {
+      fontSize: '18px', fontFamily: 'monospace', color: '#22d3ee'
+    }).setOrigin(0, 0.5).setDepth(11);
+
+    // Progress fraction
+    const levLabel = `Levels ${stats.levelsCompleted}/${stats.levelsTotal}`;
+    this.add.text(width / 2 + 80, barY + barH / 2, levLabel, {
+      fontSize: '16px', fontFamily: 'monospace', color: '#94a3b8'
+    }).setOrigin(0, 0.5).setDepth(11);
+
+    // Badge (right-aligned)
+    if (isPerfect) {
+      this.add.text(width / 2 + 300, barY + barH / 2, '✨ PERFECT CLEAR', {
+        fontSize: '16px', fontFamily: 'Arial Black, Arial, sans-serif', color: '#ffd700'
+      }).setOrigin(1, 0.5).setDepth(11);
+    } else if (isComplete) {
+      this.add.text(width / 2 + 300, barY + barH / 2, '🏆 WORLD COMPLETE', {
+        fontSize: '16px', fontFamily: 'Arial Black, Arial, sans-serif', color: '#22c55e'
+      }).setOrigin(1, 0.5).setDepth(11);
     }
   }
 
+  // ── Level grid ──────────────────────────────────────────────────────────────
+
+  private createLevelGrid(width: number, height: number): void {
+    const levels = [
+      { id: 'world1_level1', world: 1, level: 1, name: 'City Start' },
+      { id: 'world1_level2', world: 1, level: 2, name: 'Pipe Dreams' },
+      { id: 'world1_level3', world: 1, level: 3, name: 'Lab Test' },
+      { id: 'world1_level4', world: 1, level: 4, name: 'Factory Floor' },
+      { id: 'world1_level5', world: 1, level: 5, name: 'Icy Cavern' },
+      { id: 'world1_level6', world: 1, level: 6, name: 'Sand Dunes' },
+      { id: 'world1_level7', world: 1, level: 7, name: 'Rainy Rooftop' },
+      { id: 'world1_level8', world: 1, level: 8, name: 'Final Showdown' },
+    ];
+
+    const cols        = 4;
+    const buttonW     = 182;
+    const buttonH     = 105;
+    const gapX        = 18;
+    const gapY        = 16;
+    const gridW       = cols * buttonW + (cols - 1) * gapX;
+    const startX      = (width - gridW) / 2 + buttonW / 2;
+    const startY      = 148;
+
+    for (let i = 0; i < levels.length; i++) {
+      const level = levels[i];
+      const col   = i % cols;
+      const row   = Math.floor(i / cols);
+      const x     = startX + col * (buttonW + gapX);
+      const y     = startY + row * (buttonH + gapY);
+      this.levelButtons.push(this.createLevelButton(x, y, buttonW, buttonH, level, false));
+    }
+
+    // Sandbox button at the bottom
+    const sandboxY = startY + 2 * (buttonH + gapY) + 20;
+    this.levelButtons.push(
+      this.createLevelButton(width / 2, sandboxY, 200, 62, { id: 'sandbox', world: 0, level: 0, name: 'Sandbox' }, true)
+    );
+  }
+
   private createLevelButton(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
+    x: number, y: number, width: number, height: number,
     level: { id: string; world: number; level: number; name: string },
-    isSandbox: boolean = false
+    isSandbox: boolean,
   ): Phaser.GameObjects.Container {
     const container = this.add.container(x, y);
+    const isUnlocked = PM.isLevelUnlocked(level.id, this.progress);
+    const prog       = this.progress.get(level.id);
 
-    // Check if level is unlocked
-    const isUnlocked = this.isLevelUnlocked(level);
-    const progress = this.progress.get(level.id);
-
-    // Button background
-    const bg = this.add.graphics();
-    const bgColor = isUnlocked ? 0x1e3a8a : 0x374151;
+    const bgColor     = isUnlocked ? 0x1e3a8a : 0x374151;
     const borderColor = isUnlocked ? 0x3b82f6 : 0x4b5563;
 
+    const bg = this.add.graphics();
     bg.fillStyle(bgColor, 0.9);
     bg.fillRoundedRect(-width / 2, -height / 2, width, height, 8);
     bg.lineStyle(2, borderColor, 1);
     bg.strokeRoundedRect(-width / 2, -height / 2, width, height, 8);
 
-    // Level number
-    const levelNum = this.add.text(
-      -width / 2 + 20,
-      -height / 2 + 20,
-      isSandbox ? '∞' : `${level.level}`,
-      {
-        fontSize: isSandbox ? '32px' : '28px',
+    // Level number (top-left)
+    const numText = this.add.text(-width / 2 + 14, -height / 2 + 14,
+      isSandbox ? '∞' : `${level.level}`, {
+        fontSize: isSandbox ? '28px' : '26px',
         fontFamily: 'Arial Black, Arial, sans-serif',
-        color: isUnlocked ? '#fbbf24' : '#6b7280'
+        color: isUnlocked ? '#fbbf24' : '#6b7280',
       }
-    ).setOrigin(0.5);
+    ).setOrigin(0, 0);
 
-    // Level name
-    const nameText = this.add.text(
-      0,
-      isSandbox ? 5 : 5,
-      level.name,
-      {
-        fontSize: isSandbox ? '20px' : '18px',
-        fontFamily: 'Arial, sans-serif',
-        color: isUnlocked ? '#e2e8f0' : '#6b7280',
-        fontStyle: isSandbox ? 'italic' : 'normal'
-      }
-    ).setOrigin(0.5);
+    // Level name (centre)
+    const nameText = this.add.text(0, isSandbox ? 4 : -8, level.name, {
+      fontSize: isSandbox ? '19px' : '17px',
+      fontFamily: 'Arial, sans-serif',
+      color: isUnlocked ? '#e2e8f0' : '#6b7280',
+      fontStyle: isSandbox ? 'italic' : 'normal',
+    }).setOrigin(0.5);
 
-    // Progress indicators (gems and completion)
-    if (isUnlocked && progress && !isSandbox) {
-      // Gem count
-      const gemText = this.add.text(
-        0,
-        height / 2 - 25,
-        `💎 ${progress.gems}/${progress.totalGems}`,
-        {
-          fontSize: '14px',
-          fontFamily: 'monospace',
-          color: '#22d3ee'
-        }
-      ).setOrigin(0.5);
+    container.add([bg, numText, nameText]);
 
-      // Completion checkmark
-      if (progress.completed) {
-        const checkmark = this.add.text(width / 2 - 20, -height / 2 + 20, '✓', {
-          fontSize: '24px',
-          color: '#22c55e'
-        }).setOrigin(0.5);
-        container.add(checkmark);
-      }
-
-      container.add(gemText);
-    } else if (!isUnlocked && !isSandbox) {
-      // Lock icon
-      const lockIcon = this.add.text(0, 10, '🔒', {
-        fontSize: '32px'
+    if (!isSandbox && isUnlocked && prog) {
+      // Gem count (bottom centre)
+      const gemText = this.add.text(0, height / 2 - 20, `💎 ${prog.gems}/${prog.totalGems}`, {
+        fontSize: '13px', fontFamily: 'monospace', color: '#22d3ee'
       }).setOrigin(0.5);
-      container.add(lockIcon);
+
+      // Star row (below gem text)
+      const starStr = '★'.repeat(prog.stars) + '☆'.repeat(3 - prog.stars);
+      const starText = this.add.text(0, height / 2 - 5, starStr, {
+        fontSize: '14px', fontFamily: 'Arial, sans-serif', color: '#fbbf24'
+      }).setOrigin(0.5);
+
+      container.add([gemText, starText]);
+
+      // Completion tick (top-right corner)
+      if (prog.completed) {
+        container.add(
+          this.add.text(width / 2 - 12, -height / 2 + 14, '✓', {
+            fontSize: '20px', color: '#22c55e'
+          }).setOrigin(0.5, 0)
+        );
+      }
+    } else if (!isUnlocked && !isSandbox) {
+      container.add(
+        this.add.text(0, 12, '🔒', { fontSize: '28px' }).setOrigin(0.5)
+      );
     }
 
-    container.add([bg, levelNum, nameText]);
     container.setSize(width, height);
 
-    // Make interactive if unlocked
     if (isUnlocked) {
       container.setInteractive({ useHandCursor: true });
 
@@ -249,47 +233,17 @@ export class LevelSelect extends Phaser.Scene {
         container.setScale(1);
       });
 
-      container.on('pointerdown', () => {
-        this.startLevel(level.id);
-      });
+      container.on('pointerdown', () => this.startLevel(level.id));
     }
 
     container.setDepth(5);
     return container;
   }
 
-  private isLevelUnlocked(level: { id: string; world: number; level: number }): boolean {
-    // Sandbox is always unlocked
-    if (level.id === 'sandbox') return true;
+  // ── Back button ─────────────────────────────────────────────────────────────
 
-    // First level is always unlocked
-    if (level.world === 1 && level.level === 1) return true;
-
-    // Level is unlocked if previous level is completed
-    const prevLevel = this.levels.find(
-      l => l.world === level.world && l.level === level.level - 1
-    );
-    if (prevLevel) {
-      const prevProgress = this.progress.get(prevLevel.id);
-      return prevProgress?.completed ?? false;
-    }
-
-    return false;
-  }
-
-  private startLevel(levelId: string): void {
-    // Store selected level for game scene to load
-    this.registry.set('selectedLevel', levelId);
-
-    // Fade out and transition
-    this.cameras.main.fade(300, 0, 0, 0);
-    this.time.delayedCall(300, () => {
-      this.scene.start('MarblePlatform', { levelId });
-    });
-  }
-
-  private createBackButton(width: number, height: number): void {
-    this.backButton = this.add.container(80, 40);
+  private createBackButton(): void {
+    this.backButton = this.add.container(75, 40);
 
     const bg = this.add.graphics();
     bg.fillStyle(0x374151, 1);
@@ -298,9 +252,7 @@ export class LevelSelect extends Phaser.Scene {
     bg.strokeRoundedRect(-50, -18, 100, 36, 8);
 
     const text = this.add.text(0, 0, '← BACK', {
-      fontSize: '16px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#e2e8f0'
+      fontSize: '15px', fontFamily: 'Arial, sans-serif', color: '#e2e8f0'
     }).setOrigin(0.5);
 
     this.backButton.add([bg, text]);
@@ -308,32 +260,33 @@ export class LevelSelect extends Phaser.Scene {
     this.backButton.setInteractive({ useHandCursor: true });
 
     this.backButton.on('pointerover', () => {
-      bg.clear();
-      bg.fillStyle(0x4b5563, 1);
+      bg.clear(); bg.fillStyle(0x4b5563, 1);
       bg.fillRoundedRect(-50, -18, 100, 36, 8);
       bg.lineStyle(2, 0x6b7280, 1);
       bg.strokeRoundedRect(-50, -18, 100, 36, 8);
     });
 
     this.backButton.on('pointerout', () => {
-      bg.clear();
-      bg.fillStyle(0x374151, 1);
+      bg.clear(); bg.fillStyle(0x374151, 1);
       bg.fillRoundedRect(-50, -18, 100, 36, 8);
       bg.lineStyle(2, 0x4b5563, 1);
       bg.strokeRoundedRect(-50, -18, 100, 36, 8);
     });
 
-    this.backButton.on('pointerdown', () => {
-      this.returnToTitle();
-    });
-
+    this.backButton.on('pointerdown', () => this.returnToTitle());
     this.backButton.setDepth(10);
+  }
+
+  // ── Navigation ───────────────────────────────────────────────────────────────
+
+  private startLevel(levelId: string): void {
+    this.registry.set('selectedLevel', levelId);
+    this.cameras.main.fade(300, 0, 0, 0);
+    this.time.delayedCall(300, () => this.scene.start('MarblePlatform', { levelId }));
   }
 
   private returnToTitle(): void {
     this.cameras.main.fade(300, 0, 0, 0);
-    this.time.delayedCall(300, () => {
-      this.scene.start('TitleScreen');
-    });
+    this.time.delayedCall(300, () => this.scene.start('TitleScreen'));
   }
 }
