@@ -751,6 +751,7 @@ export class MarblePlatform extends Phaser.Scene {
     if (this.legLaunchT > 0) this.legLaunchT = Math.max(0, this.legLaunchT - dt * 5);
     this.updateVisuals(time, body, dt, grounded);
     this.checkHardLanding(body, grounded);
+    this.soundSystem.updateRolling(Math.abs(body.velocity.x));
     this.updateHUD(time, body, grounded, surface);
     this.checkGoalAndDeath();
 
@@ -800,6 +801,7 @@ export class MarblePlatform extends Phaser.Scene {
     const props = SURFACE_PROPS[surface];
     // Set vertical bounce for next physics step
     body.setBounce(0.12, props.bounceY);
+    if (grounded) this.soundSystem.playSurfaceTransition(surface);
 
     // BOUNCE_PAD: Arcade Physics bounce has a 1-frame lag, so apply a direct impulse.
     // Fires once per landing: vy > -50 means "not already bouncing hard upward".
@@ -960,6 +962,7 @@ export class MarblePlatform extends Phaser.Scene {
       this.charging           = true;
       this.chargeT0           = time;
       this.chargeStartSurface = surface;
+      this.soundSystem.playJumpChargeStart();
     }
   }
 
@@ -969,6 +972,7 @@ export class MarblePlatform extends Phaser.Scene {
     const props = SURFACE_PROPS[this.chargeStartSurface];
     const jumpV = Phaser.Math.Linear(this.JUMP_MIN, this.JUMP_MAX, t) * props.jumpMultiplier;
     body.setVelocityY(-jumpV);
+    this.soundSystem.playJumpRelease(t);
     this.marble.setScale(1);
     this.tweens.add({
       targets: this.marble,
@@ -1114,6 +1118,7 @@ export class MarblePlatform extends Phaser.Scene {
         if (approachVx >= this.ENEMY_KILL_VX) {
           // Kill enemy
           e.alive = false;
+          this.soundSystem.playEnemyKill();
           this.tweens.add({ targets: e.img, scaleX: 0, scaleY: 0, alpha: 0, duration: 200 });
         } else {
           // Knockback marble — scatter gems Sonic-style
@@ -1121,6 +1126,7 @@ export class MarblePlatform extends Phaser.Scene {
           body.setVelocityX(knockDir * this.KNOCKBACK_VX);
           body.setVelocityY(-280);
           this.invincibleUntil = time + this.INVINCIBLE_MS;
+          this.soundSystem.playKnockback();
           this.scatterGems(time);
           this.tweens.add({ targets: this.marble, alpha: 0.3, duration: 80, yoyo: true, repeat: 3, onComplete: () => this.marble.setAlpha(1) });
         }
@@ -1140,6 +1146,7 @@ export class MarblePlatform extends Phaser.Scene {
       if (Phaser.Math.Distance.Between(mx, my, gem.x, gem.y) < this.R + 14) {
         gem.collected = true;
         this.gemCount++;
+        this.soundSystem.playGemCollect();
         this.tweens.add({ targets: gem.img, y: gem.y - 40, alpha: 0, duration: 400 });
         // Gem sparkle particle effect
         this.createGemSparkles(gem.x, gem.y);
@@ -1183,6 +1190,7 @@ export class MarblePlatform extends Phaser.Scene {
         this.respawnX = cp.x;
         this.respawnY = cp.y - this.R * 2;
         cp.img.setTexture('cpTexOn');
+        this.soundSystem.playCheckpoint();
         // Checkpoint flash particle effect
         this.createCheckpointFlash(cp.x, cp.y);
         // Float-up label to signal activation
@@ -1391,6 +1399,7 @@ export class MarblePlatform extends Phaser.Scene {
   private checkGoalAndDeath(): void {
     if (!this.goalReached && this.marble.x > this.levelDef.goal.x - 30) {
       this.goalReached = true;
+      this.soundSystem.playGoal();
       this.showGoalMessage();
     }
     if (this.marble.y > this.levelDef.groundY + 200) {
@@ -1402,6 +1411,7 @@ export class MarblePlatform extends Phaser.Scene {
   // HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
   private respawn(): void {
+    this.soundSystem.stopAll();
     this.charging         = false;
     this.chargeLocked     = false;
     this.chargeArmedUntil = 0;
