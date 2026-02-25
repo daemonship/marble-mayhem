@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { LevelDef, SurfaceType, PlatformDef, SpeedPadDef } from '../types/LevelDef';
 import * as Levels from '../levels';
 import { SeesawSystem, SeesawContact } from '../systems/SeesawSystem';
+import { SoundSystem } from '../systems/SoundSystem';
+import { MobileControls } from '../systems/MobileControls';
 
 // ── Surface physics table ─────────────────────────────────────────────────────
 // drag            — absolute per-frame drag coefficient (NOT a multiplier on base drag)
@@ -105,6 +107,7 @@ export class MarblePlatform extends Phaser.Scene {
   private keys!: { A: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
 
   private levelDef!: LevelDef;
+  private soundSystem!: SoundSystem;
 
   // ── Core marble state ──────────────────────────────────────────────────────
   private charging           = false;   // space held, charge building
@@ -189,6 +192,9 @@ export class MarblePlatform extends Phaser.Scene {
   // ── Seesaw system ──────────────────────────────────────────────────────────
   private seesawSystem!: SeesawSystem;
 
+  // ── Mobile controls ─────────────────────────────────────────────────────────
+  private mobileControls!: MobileControls;
+
   // ── Gem counter + scattered gems (Sonic-style loss on hit) ─────────────────
   private gemCount      = 0;
   private scatteredGems: ScatteredGem[] = [];
@@ -247,6 +253,8 @@ export class MarblePlatform extends Phaser.Scene {
     this.cameras.main.setBounds(0, -400, this.levelDef.worldW, 1100);
 
     this.seesawSystem = new SeesawSystem(this);
+    this.soundSystem = new SoundSystem(this);
+    this.mobileControls = new MobileControls(this);
 
     this.buildParallax();
     this.buildTextures();
@@ -257,6 +265,9 @@ export class MarblePlatform extends Phaser.Scene {
 
     this.cameras.main.startFollow(this.marble, true, 0.09, 0.09);
     this.cameras.main.setDeadzone(120, 80);
+    
+    // Level transition: fade in
+    this.cameras.main.fadeIn(400, 0, 0, 0);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -734,6 +745,7 @@ export class MarblePlatform extends Phaser.Scene {
     this.updateSpeedPads();
     if (this.legLaunchT > 0) this.legLaunchT = Math.max(0, this.legLaunchT - dt * 5);
     this.updateVisuals(time, body, dt, grounded);
+    this.checkHardLanding(body, grounded);
     this.updateHUD(time, body, grounded, surface);
     this.checkGoalAndDeath();
 
@@ -815,8 +827,13 @@ export class MarblePlatform extends Phaser.Scene {
     dt: number,
     time: number,
   ): void {
-    const goLeft  = this.cursors.left.isDown  || this.keys.A.isDown;
-    const goRight = this.cursors.right.isDown || this.keys.D.isDown;
+    // Update mobile controls
+    this.mobileControls.update();
+    const mcLeft = this.mobileControls.leftPressed;
+    const mcRight = this.mobileControls.rightPressed;
+    
+    const goLeft  = this.cursors.left.isDown  || this.keys.A.isDown || mcLeft;
+    const goRight = this.cursors.right.isDown || this.keys.D.isDown || mcRight;
 
     // If stopped (or near-stopped) while charging and a direction key is pressed,
     // discharge the charge (fire the jump) — you can't move without jumping first.
@@ -869,9 +886,9 @@ export class MarblePlatform extends Phaser.Scene {
   //   LOCKED    → chargeLocked=true (re-pressed in window, charge frozen at lockedT)
   private updateJump(time: number, body: Phaser.Physics.Arcade.Body, grounded: boolean, surface: SurfaceType): void {
     const space        = this.cursors.space;
-    const spaceDown    = space.isDown;
-    const spaceJustDown = spaceDown && !this.prevSpace;
-    const spaceJustUp  = !spaceDown && this.prevSpace;
+    const spaceDown    = space.isDown || this.mobileControls.jumpPressed;
+    const spaceJustDown = (space.isDown && !this.prevSpace) || this.mobileControls.consumeJumpJustPressed();
+    const spaceJustUp  = (!space.isDown && this.prevSpace) && !this.mobileControls.jumpPressed;
 
     // ── ARMED: check for re-press (lock) or timeout (fire) ─────────────────
     if (this.chargeArmedUntil > 0) {
@@ -1119,6 +1136,8 @@ export class MarblePlatform extends Phaser.Scene {
         gem.collected = true;
         this.gemCount++;
         this.tweens.add({ targets: gem.img, y: gem.y - 40, alpha: 0, duration: 400 });
+        // Gem sparkle particle effect
+        this.createGemSparkles(gem.x, gem.y);
       }
     }
 
@@ -1159,6 +1178,8 @@ export class MarblePlatform extends Phaser.Scene {
         this.respawnX = cp.x;
         this.respawnY = cp.y - this.R * 2;
         cp.img.setTexture('cpTexOn');
+        // Checkpoint flash particle effect
+        this.createCheckpointFlash(cp.x, cp.y);
         // Float-up label to signal activation
         const label = this.add.text(cp.x, cp.y - 60, 'CHECKPOINT', {
           fontSize: '12px', fontFamily: 'monospace', color: '#22c55e', stroke: '#000', strokeThickness: 3,
@@ -1166,6 +1187,118 @@ export class MarblePlatform extends Phaser.Scene {
         this.tweens.add({ targets: label, y: cp.y - 100, alpha: 0, duration: 1200, onComplete: () => label.destroy() });
       }
     }
+  }
+
+  // ── Particle Effects ──────────────────────────────────────────────────────
+  private createGemSparkles(x: number, y: number): void {
+    const colors = [0x06b6d4, 0x22d3ee, 0x67e8f9, 0xa5f3fc, 0xffffff];
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const speed = 80 + Math.random() * 60;
+      const sparkle = this.add.graphics();
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      sparkle.fillStyle(color, 1);
+      sparkle.fillCircle(0, 0, 2 + Math.random() * 3);
+      sparkle.setPosition(x, y);
+      sparkle.setDepth(15);
+      
+      const targetX = x + Math.cos(angle) * speed;
+      const targetY = y + Math.sin(angle) * speed - 20;
+      
+      this.tweens.add({
+        targets: sparkle,
+        x: targetX,
+        y: targetY,
+        alpha: 0,
+        scale: 0,
+        duration: 400 + Math.random() * 200,
+        ease: 'Quad.easeOut',
+        onComplete: () => sparkle.destroy(),
+      });
+    }
+  }
+
+  private createCheckpointFlash(x: number, y: number): void {
+    // Expanding ring effect
+    const ring = this.add.graphics().setDepth(15);
+    ring.lineStyle(4, 0x22c55e, 1);
+    ring.strokeCircle(x, y - 26, 10);
+    
+    this.tweens.add({
+      targets: ring,
+      scaleX: 4,
+      scaleY: 4,
+      alpha: 0,
+      duration: 500,
+      ease: 'Quad.easeOut',
+      onComplete: () => ring.destroy(),
+    });
+    
+    // Vertical beams
+    for (let i = 0; i < 3; i++) {
+      const beam = this.add.graphics().setDepth(15);
+      beam.fillStyle(0x22c55e, 0.7);
+      beam.fillRect(x - 2, y - 60 - i * 10, 4, 20);
+      
+      this.tweens.add({
+        targets: beam,
+        y: y - 100 - i * 10,
+        alpha: 0,
+        duration: 600 + i * 100,
+        ease: 'Quad.easeOut',
+        onComplete: () => beam.destroy(),
+      });
+    }
+  }
+
+  private createGoalConfetti(x: number, y: number): void {
+    const colors = [0xfbbf24, 0x22d3ee, 0x22c55e, 0xf472b6, 0xa78bfa, 0xef4444];
+    
+    for (let i = 0; i < 30; i++) {
+      const confetti = this.add.graphics();
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const size = Math.random() * 8 + 4;
+      
+      confetti.fillStyle(color, 1);
+      confetti.fillRect(0, 0, size, size * 0.6);
+      
+      const startX = x + (Math.random() - 0.5) * 60;
+      const startY = y - 40 + (Math.random() - 0.5) * 40;
+      confetti.setPosition(startX, startY);
+      confetti.setDepth(20);
+      
+      this.tweens.add({
+        targets: confetti,
+        y: startY + 100 + Math.random() * 80,
+        x: startX + (Math.random() - 0.5) * 150,
+        rotation: Math.random() * Math.PI * 4,
+        alpha: 0,
+        duration: 1500 + Math.random() * 1000,
+        ease: 'Quad.easeOut',
+        onComplete: () => confetti.destroy(),
+      });
+    }
+  }
+
+  // ── Camera Shake on Hard Landing ──────────────────────────────────────────
+  private lastVelocityY = 0;
+  
+  private checkHardLanding(body: Phaser.Physics.Arcade.Body, grounded: boolean): void {
+    // Detect hard landing: was in air (last frame had significant downward velocity) and now grounded
+    const currentVy = body.velocity.y;
+    const wasAirborne = Math.abs(this.lastVelocityY) > 400;
+    
+    if (grounded && wasAirborne && this.lastVelocityY > 0) {
+      // Calculate shake intensity based on fall speed
+      const fallSpeed = this.lastVelocityY;
+      const shakeIntensity = Math.min(fallSpeed / 1000, 15); // Cap at 15
+      
+      if (shakeIntensity > 3) {
+        this.cameras.main.shake(150, shakeIntensity / 100);
+      }
+    }
+    
+    this.lastVelocityY = currentVy;
   }
 
   // ── Visuals: rolling + charge aura + charge bar + portals ─────────────────
@@ -1539,6 +1672,9 @@ export class MarblePlatform extends Phaser.Scene {
   }
 
   private showGoalMessage(): void {
+    // Create goal confetti effect
+    this.createGoalConfetti(this.levelDef.goal.x, this.levelDef.goal.y);
+    
     if (this.trialStartMs >= 0) {
       const elapsed = this.time.now - this.trialStartMs;
       const isNewBest = this.bestTime === 0 || elapsed < this.bestTime;
@@ -1562,8 +1698,9 @@ export class MarblePlatform extends Phaser.Scene {
         'sandbox': 'Sandbox',
       };
 
-      // Transition to level complete scene after a brief delay
-      this.time.delayedCall(1500, () => {
+      // Level transition: fade out then transition to level complete
+      this.cameras.main.fade(400, 0, 0, 0);
+      this.time.delayedCall(400, () => {
         this.scene.start('LevelComplete', {
           levelId: this.levelDef.id,
           levelName: levelNames[this.levelDef.id] ?? this.levelDef.id,
