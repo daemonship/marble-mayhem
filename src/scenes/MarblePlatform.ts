@@ -812,8 +812,10 @@ export class MarblePlatform extends Phaser.Scene {
     } else {
       body.setAccelerationX(0);
       if (grounded && Math.abs(body.velocity.x) > 1) {
-        const drag = Math.pow(props.drag, dt / 0.01667);
-        body.setVelocityX(body.velocity.x * drag);
+        // Free-roll: minimal rolling friction only.
+        // To stop intentionally, use the brake (Shift) or run into something.
+        const rollFriction = 1 - (1 - props.drag) * 0.08;
+        body.setVelocityX(body.velocity.x * Math.pow(rollFriction, dt / 0.01667));
       } else if (grounded) {
         body.setVelocityX(0);
       }
@@ -1273,22 +1275,22 @@ export class MarblePlatform extends Phaser.Scene {
 
     // ── Physics: decelerate to a full stop ─────────────────────────────────
     if (activelyBraking) {
-      const effectiveness: Record<SurfaceType, number> = {
-        [SurfaceType.ICE]:       0.00,  // foot skates — no help
-        [SurfaceType.WET_METAL]: 0.15,  // slick — almost nothing
-        [SurfaceType.SNOW]:      0.50,
-        [SurfaceType.BOUNCE_PAD]:0.60,
-        [SurfaceType.CONVEYOR]:  0.75,
-        [SurfaceType.GRASS]:     0.90,
-        [SurfaceType.CONCRETE]:  1.00,
-        [SurfaceType.SAND]:      1.35,  // foot digs in — very effective
-        [SurfaceType.MUD]:       1.60,  // deep drag — maximum
+      // Per-surface brake drag coefficient — higher = gentler stop.
+      // Ice barely helps; mud digs in hardest. All stop marble fully eventually.
+      const brakeDrag: Record<SurfaceType, number> = {
+        [SurfaceType.ICE]:       0.997,  // foot skates — almost useless
+        [SurfaceType.WET_METAL]: 0.978,
+        [SurfaceType.SNOW]:      0.962,
+        [SurfaceType.BOUNCE_PAD]:0.958,
+        [SurfaceType.CONVEYOR]:  0.953,
+        [SurfaceType.GRASS]:     0.948,
+        [SurfaceType.CONCRETE]:  0.942,
+        [SurfaceType.SAND]:      0.928,  // foot digs in
+        [SurfaceType.MUD]:       0.908,  // maximum grip
       };
-      const eff       = effectiveness[surface] ?? 1.0;
-      const normDrag  = SURFACE_PROPS[surface].drag;
-      const brakeDrag = normDrag - (normDrag - 0.84) * eff;  // 0.84 = gentler than before
-      const newVx     = vx * Math.pow(brakeDrag, dt / 0.01667);
-      body.setVelocityX(Math.abs(newVx) < 20 ? 0 : newVx);  // clamp to full stop
+      const coeff = brakeDrag[surface] ?? 0.942;
+      const newVx = vx * Math.pow(coeff, dt / 0.01667);
+      body.setVelocityX(Math.abs(newVx) < 20 ? 0 : newVx);
     }
 
     // ── Visual: draw whenever leg is at all visible ─────────────────────────
