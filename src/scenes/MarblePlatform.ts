@@ -1261,14 +1261,16 @@ export class MarblePlatform extends Phaser.Scene {
     this.footGfx.clear();
     const vx    = body.velocity.x;
     const speed = Math.abs(vx);
-    const activelyBraking = this.braking && grounded && speed > 8;
+    // Charging also acts as a brake — you're planting your feet to jump.
+    // Foot visual stays Shift-only; charge legs handle the charge visual.
+    const activelyBraking = (this.braking || this.isChargeActive) && grounded && speed > 8;
 
     // Remember last direction of travel so retract visual aims the right way
     if (speed > 8) this.brakeDir = vx > 0 ? 1 : -1;
 
     // ── Animate extension: shoot out fast, retract slower ──────────────────
     const maxExt    = this.R * 2.0;
-    const targetExt = activelyBraking ? maxExt : 0;
+    const targetExt = (this.braking && grounded && speed > 8) ? maxExt : 0;
     const rate      = targetExt > this.brakeExtension ? 22 : 9;
     this.brakeExtension += (targetExt - this.brakeExtension) * dt * rate;
     this.brakeExtension  = Math.max(0, this.brakeExtension);
