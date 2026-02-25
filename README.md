@@ -15,7 +15,7 @@
 | Terrain surface system + sandbox | ✅ Complete | 9 surface types with distinct physics |
 | Repo migration | ✅ Complete | marble-mayhem repo created, main.ts simplified |
 | World 1 level design (8 levels) | ✅ Complete | city, pipes, laboratory, factory, icy cavern, sand dunes, rainy rooftop, final boss |
-| Game flow (menu → level select → play → win) | 📋 Planned | Title screen, level select, level complete, death/respawn |
+| Game flow (menu → level select → play → win) | ✅ Complete | Title screen, level select with locked/unlocked states, level complete screen with stats, death counter |
 | Progression and gem tracking | 📋 Planned | localStorage persistence, level unlock, star rating |
 | SFX | 📋 Planned | Web Audio API - rolling, jump, surface transitions |
 | Polish pass | 📋 Planned | Particles, camera shake, level transitions, mobile controls |

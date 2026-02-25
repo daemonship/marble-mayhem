@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { LevelDef, SurfaceType, PlatformDef, SpeedPadDef } from '../types/LevelDef';
-import { sandbox } from '../levels/sandbox';
+import * as Levels from '../levels';
 import { SeesawSystem, SeesawContact } from '../systems/SeesawSystem';
 
 // ── Surface physics table ─────────────────────────────────────────────────────
@@ -203,6 +203,9 @@ export class MarblePlatform extends Phaser.Scene {
   private bestTime     = 0;
   private timerText!:  Phaser.GameObjects.Text;
 
+  // ── Death counter ───────────────────────────────────────────────────────────
+  private deathCount = 0;
+
   // True whenever any part of the charge state is active (blocks springs, rotation, etc.)
   private get isChargeActive(): boolean {
     return this.charging || this.chargeLocked || this.chargeArmedUntil > 0;
@@ -213,13 +216,31 @@ export class MarblePlatform extends Phaser.Scene {
   // ═══════════════════════════════════════════════════════════════════════════
   // CREATE
   // ═══════════════════════════════════════════════════════════════════════════
-  create(): void {
-    this.levelDef  = sandbox;
-    this.respawnX  = this.levelDef.spawnX;
-    this.respawnY  = this.levelDef.spawnY;
+  create(data?: { levelId?: string }): void {
+    // Get level ID from scene data or default to sandbox
+    const levelId = data?.levelId ?? 'sandbox';
+
+    // Get level definition
+    const levelMap: Record<string, LevelDef> = {
+      'world1_level1': Levels.world1_level1,
+      'world1_level2': Levels.world1_level2,
+      'world1_level3': Levels.world1_level3,
+      'world1_level4': Levels.world1_level4,
+      'world1_level5': Levels.world1_level5,
+      'world1_level6': Levels.world1_level6,
+      'world1_level7': Levels.world1_level7,
+      'world1_level8': Levels.world1_level8,
+      'sandbox': Levels.sandbox,
+    };
+
+    this.levelDef = levelMap[levelId] ?? Levels.sandbox;
+    this.respawnX = this.levelDef.spawnX;
+    this.respawnY = this.levelDef.spawnY;
+    this.deathCount = 0;
+
     let stored: string | null = null;
     try { stored = localStorage.getItem(`best_${this.levelDef.id}`); } catch { /* private/restricted browsing */ }
-    const parsed  = stored ? parseInt(stored, 10) : NaN;
+    const parsed = stored ? parseInt(stored, 10) : NaN;
     this.bestTime = Number.isFinite(parsed) ? parsed : 0;
 
     this.physics.world.setBounds(0, -400, this.levelDef.worldW, 1100);
@@ -1249,6 +1270,7 @@ export class MarblePlatform extends Phaser.Scene {
     this.trialStartMs     = -1;
     this.gemCount         = 0;
     this.goalReached      = false;
+    this.deathCount++; // Increment death counter
     this.marble.setScale(1);
     // Destroy any in-flight scattered gems
     for (const sg of this.scatteredGems) sg.img.destroy();
@@ -1519,12 +1541,44 @@ export class MarblePlatform extends Phaser.Scene {
   private showGoalMessage(): void {
     if (this.trialStartMs >= 0) {
       const elapsed = this.time.now - this.trialStartMs;
-      if (this.bestTime === 0 || elapsed < this.bestTime) {
+      const isNewBest = this.bestTime === 0 || elapsed < this.bestTime;
+
+      if (isNewBest) {
         this.bestTime = elapsed;
         try { localStorage.setItem(`best_${this.levelDef.id}`, String(elapsed)); } catch { /* storage full / restricted */ }
       }
       this.timerText.setText(`${this.fmtTime(elapsed)}  ★`);
+
+      // Get level name for completion screen
+      const levelNames: Record<string, string> = {
+        'world1_level1': 'City Start',
+        'world1_level2': 'Pipe Dreams',
+        'world1_level3': 'Lab Test',
+        'world1_level4': 'Factory Floor',
+        'world1_level5': 'Icy Cavern',
+        'world1_level6': 'Sand Dunes',
+        'world1_level7': 'Rainy Rooftop',
+        'world1_level8': 'Final Showdown',
+        'sandbox': 'Sandbox',
+      };
+
+      // Transition to level complete scene after a brief delay
+      this.time.delayedCall(1500, () => {
+        this.scene.start('LevelComplete', {
+          levelId: this.levelDef.id,
+          levelName: levelNames[this.levelDef.id] ?? this.levelDef.id,
+          gems: this.gemCount,
+          totalGems: this.gems.length,
+          time: elapsed,
+          isNewBest: isNewBest,
+          deaths: this.deathCount,
+        });
+      });
+
+      return; // Skip the old message
     }
+
+    // Fallback for sandbox without timer
     const txt = this.add.text(
       this.marble.x, this.levelDef.groundY - 120,
       '🎉  SANDBOX COMPLETE!\nAll mechanics tested.',

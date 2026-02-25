@@ -8,7 +8,10 @@ declare global {
 }
 
 import Phaser from 'phaser';
+import { TitleScreen } from './scenes/TitleScreen';
+import { LevelSelect } from './scenes/LevelSelect';
 import { MarblePlatform } from './scenes/MarblePlatform';
+import { LevelComplete } from './scenes/LevelComplete';
 
 // Initialize Phaser game
 const config: Phaser.Types.Core.GameConfig = {
@@ -29,7 +32,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [MarblePlatform],
+  scene: [TitleScreen, LevelSelect, MarblePlatform, LevelComplete],
 };
 
 const game = new Phaser.Game(config);

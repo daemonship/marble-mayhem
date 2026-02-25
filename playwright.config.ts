@@ -19,7 +19,16 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: [
+            '--disable-gpu',
+            '--use-gl=swiftshader',
+            '--disable-software-rasterizer',
+          ],
+        },
+      },
     },
   ],
   // Only start a local server if APP_URL is not provided (external deployment)
