@@ -862,13 +862,18 @@ export class MarblePlatform extends Phaser.Scene {
 
     // ── CHARGING: space held, t growing ────────────────────────────────────
     if (this.charging) {
-      const t = Math.min((time - this.chargeT0) / this.MAX_CHARGE, 1);
+      const t            = Math.min((time - this.chargeT0) / this.MAX_CHARGE, 1);
+      const chargeVisible = (time - this.chargeT0) >= 150;
       if (!this.goalReached) {
-        const jiggleFreq = 0.014 + t * 0.038;
-        const jiggleAmp  = t * 0.07;
-        const jX = Math.sin(time * jiggleFreq) * jiggleAmp;
-        const jY = Math.sin(time * jiggleFreq * 1.31) * jiggleAmp;
-        this.marble.setScale(1 + t * 0.28 + jX, 1 - t * 0.22 + jY);
+        if (chargeVisible) {
+          const jiggleFreq = 0.014 + t * 0.038;
+          const jiggleAmp  = t * 0.07;
+          const jX = Math.sin(time * jiggleFreq) * jiggleAmp;
+          const jY = Math.sin(time * jiggleFreq * 1.31) * jiggleAmp;
+          this.marble.setScale(1 + t * 0.28 + jX, 1 - t * 0.22 + jY);
+        } else {
+          this.marble.setScale(1);
+        }
       }
       if (spaceJustUp) {
         this.charging = false;
@@ -1125,11 +1130,11 @@ export class MarblePlatform extends Phaser.Scene {
       this.marble.rotation += (body.velocity.x / this.R) * dt;
     }
 
-    // Resolve charge t for visual purposes
-    // charging: current build-up; locked/armed: fixed locked level
-    const visualT = this.charging
+    // Resolve charge t for visual purposes — suppressed during 150ms tap window
+    const chargeAge = this.charging ? (time - this.chargeT0) : Infinity;
+    const visualT = this.charging && chargeAge >= 150
       ? Math.min((time - this.chargeT0) / this.MAX_CHARGE, 1)
-      : this.isChargeActive ? this.chargeLockedT : null;
+      : (!this.charging && this.isChargeActive) ? this.chargeLockedT : null;
 
     // Charge aura
     this.glowGfx.clear();
@@ -1364,25 +1369,28 @@ export class MarblePlatform extends Phaser.Scene {
       return;
     }
 
-    // Charge coil: bent legs, deepening with t (emerge from squish)
-    const t     = visualT!;
-    const depth = this.R * 1.35 * (0.18 + 0.82 * t);
+    // Charge coil: frog-leg crouch — feet planted at ground, knees arc up and out
+    const t = visualT!;
 
     for (const side of [-1, 1]) {
+      // Hip: bottom edge of marble
       const ox = mx + side * legSep;
       const oy = my + this.R;
 
-      // Knee splays outward as charge builds (coiling spring)
-      const kneeX = ox + side * this.R * 0.44 * t;
-      const kneeY = oy + depth * 0.45;
+      // Feet stay at ground level, spreading outward as charge builds
+      const spread = this.R * (0.7 + 1.1 * t);
+      const footX  = mx + side * spread - velTilt * spread;
+      const footY  = my + this.R;  // anchored at ground
 
-      // Foot: velocity-tilted so legs lean backward when moving
-      const footX = ox - velTilt * depth * 1.2;
-      const footY = oy + depth;
+      // Knee arcs up and out — deeper crouch at higher t
+      const kneeRise  = this.R * 1.0 * t;
+      const kneeSplay = this.R * (0.3 + 0.8 * t);
+      const kneeX = mx + side * kneeSplay;
+      const kneeY = oy - kneeRise;
 
       this.legsGfx.lineStyle(5, SKIN, 0.93);
-      this.legsGfx.lineBetween(ox, oy, kneeX, kneeY);   // thigh
-      this.legsGfx.lineBetween(kneeX, kneeY, footX, footY); // calf
+      this.legsGfx.lineBetween(ox, oy, kneeX, kneeY);        // thigh (up + out)
+      this.legsGfx.lineBetween(kneeX, kneeY, footX, footY);  // calf (back down)
 
       this.legsGfx.fillStyle(SHOE, 0.95);
       this.legsGfx.fillRoundedRect(footX - 8, footY - 4, 16, 7, 3);
