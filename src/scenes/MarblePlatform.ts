@@ -178,7 +178,8 @@ export class MarblePlatform extends Phaser.Scene {
 
   // ── Jump legs ──────────────────────────────────────────────────────────────
   private legsGfx!:  Phaser.GameObjects.Graphics;
-  private legLaunchT = 0;  // 1.0 at fire, counts down to 0 over ~200ms
+  private legLaunchT       = 0;  // 1.0 at fire, counts down to 0 over ~200ms
+  private legLaunchGroundY = 0;  // world Y of ground surface at jump moment
 
   // ── Parallax layers ────────────────────────────────────────────────────────
   private pxLayers: Array<{ ts: Phaser.GameObjects.TileSprite; factor: number }> = [];
@@ -898,7 +899,8 @@ export class MarblePlatform extends Phaser.Scene {
   }
 
   private fireJump(body: Phaser.Physics.Arcade.Body, t: number): void {
-    this.legLaunchT = 1.0;
+    this.legLaunchT       = 1.0;
+    this.legLaunchGroundY = this.marble.y + this.R;
     const props = SURFACE_PROPS[this.chargeStartSurface];
     const jumpV = Phaser.Math.Linear(this.JUMP_MIN, this.JUMP_MAX, t) * props.jumpMultiplier;
     body.setVelocityY(-jumpV);
@@ -1352,19 +1354,20 @@ export class MarblePlatform extends Phaser.Scene {
     const STRIPE  = 0x5ba4e8;
 
     if (launchT > 0) {
-      // Launch spring: legs shoot straight out then fade in ~200ms
-      const ext = this.R * 2.1 * launchT;
+      // Launch spring: legs stay anchored to ground Y, fade as marble rises
+      const groundY = this.legLaunchGroundY;
       for (const side of [-1, 1]) {
         const ox = mx + side * legSep;
         const oy = my + this.R;
-        const fx = ox - velTilt * ext;
-        const fy = oy + ext;
+        // Feet spread wide then close as launchT fades
+        const footX = mx + side * this.R * (0.7 + 0.6 * launchT) - velTilt * this.R;
+        const footY = groundY;  // anchored to where ground was at jump
         this.legsGfx.lineStyle(5, SKIN, launchT);
-        this.legsGfx.lineBetween(ox, oy, fx, fy);
+        this.legsGfx.lineBetween(ox, oy, footX, footY);
         this.legsGfx.fillStyle(SHOE, launchT);
-        this.legsGfx.fillRoundedRect(fx - 8, fy - 4, 16, 7, 3);
+        this.legsGfx.fillRoundedRect(footX - 8, footY - 4, 16, 7, 3);
         this.legsGfx.fillStyle(STRIPE, launchT * 0.9);
-        this.legsGfx.fillRect(fx - 6, fy - 3, 12, 2);
+        this.legsGfx.fillRect(footX - 6, footY - 3, 12, 2);
       }
       return;
     }
