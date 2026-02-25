@@ -1277,20 +1277,26 @@ export class MarblePlatform extends Phaser.Scene {
 
     // ── Physics: decelerate to a full stop ─────────────────────────────────
     if (activelyBraking) {
-      // Per-surface brake drag coefficient — higher = gentler stop.
-      // Ice barely helps; mud digs in hardest. All stop marble fully eventually.
-      const brakeDrag: Record<SurfaceType, number> = {
-        [SurfaceType.ICE]:       0.997,  // foot skates — almost useless
-        [SurfaceType.WET_METAL]: 0.978,
-        [SurfaceType.SNOW]:      0.962,
-        [SurfaceType.BOUNCE_PAD]:0.958,
-        [SurfaceType.CONVEYOR]:  0.953,
-        [SurfaceType.GRASS]:     0.948,
-        [SurfaceType.CONCRETE]:  0.942,
-        [SurfaceType.SAND]:      0.928,  // foot digs in
-        [SurfaceType.MUD]:       0.908,  // maximum grip
-      };
-      const coeff = brakeDrag[surface] ?? 0.942;
+      let coeff: number;
+      if (this.isChargeActive) {
+        // Charge brake: strong enough to stop from MAX_VX within the 650ms charge window.
+        // Surface-independent — you're planting your feet regardless of what you're on.
+        coeff = 0.92;
+      } else {
+        // Shift brake: per-surface coefficients, gentler and surface-aware.
+        const brakeDrag: Record<SurfaceType, number> = {
+          [SurfaceType.ICE]:       0.997,  // foot skates — almost useless
+          [SurfaceType.WET_METAL]: 0.978,
+          [SurfaceType.SNOW]:      0.962,
+          [SurfaceType.BOUNCE_PAD]:0.958,
+          [SurfaceType.CONVEYOR]:  0.953,
+          [SurfaceType.GRASS]:     0.948,
+          [SurfaceType.CONCRETE]:  0.942,
+          [SurfaceType.SAND]:      0.928,  // foot digs in
+          [SurfaceType.MUD]:       0.908,  // maximum grip
+        };
+        coeff = brakeDrag[surface] ?? 0.942;
+      }
       const newVx = vx * Math.pow(coeff, dt / 0.01667);
       body.setVelocityX(Math.abs(newVx) < 20 ? 0 : newVx);
     }
