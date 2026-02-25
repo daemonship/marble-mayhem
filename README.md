@@ -10,7 +10,7 @@
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Physics model | ✅ Complete | Charge-jump, momentum carry, air control, directional momentum |
+| Physics model | ✅ Complete | Charge-jump (330-740 px/s), momentum carry, air control, directional momentum; concrete coast ~2s from max speed |
 | Level data format (LevelDef) | ✅ Complete | LevelDef interface + SurfaceType enum |
 | Terrain surface system + sandbox | ✅ Complete | 9 surface types with distinct physics |
 | Repo migration | ✅ Complete | marble-mayhem repo created, main.ts simplified |
